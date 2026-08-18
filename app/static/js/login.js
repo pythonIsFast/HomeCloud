@@ -1,47 +1,43 @@
-/* Sign-in / registration page.
+/* Sign-in / registration.
  *
  * The server replies with JSON and sets the JWT as an HttpOnly cookie, so this
- * script never handles the token itself -- JavaScript cannot read the cookie,
+ * script never handles the token itself -- JavaScript cannot read that cookie,
  * which keeps the session out of reach of XSS.
  */
 
 (function () {
   "use strict";
 
-  /* --- tabs --------------------------------------------------------------- */
-
-  const tabs = {
-    login: document.getElementById("tab-login"),
-    register: document.getElementById("tab-register"),
-  };
   const panels = {
     login: document.getElementById("panel-login"),
     register: document.getElementById("panel-register"),
   };
 
-  function selectTab(name) {
-    Object.keys(tabs).forEach((key) => {
-      if (!tabs[key] || !panels[key]) return;
-      const active = key === name;
-      tabs[key].setAttribute("aria-selected", active ? "true" : "false");
-      panels[key].hidden = !active;
+  /** Show one of the two panels (registration may be disabled server side). */
+  function show(name) {
+    if (!panels[name]) return;
+    Object.keys(panels).forEach((key) => {
+      if (panels[key]) panels[key].hidden = key !== name;
     });
+    const focusTarget = document.getElementById(name + "-email");
+    if (focusTarget) focusTarget.focus();
   }
 
-  if (tabs.login && tabs.register) {
-    tabs.login.addEventListener("click", () => selectTab("login"));
-    tabs.register.addEventListener("click", () => selectTab("register"));
-    // ?register=1 opens the registration tab directly.
-    if (new URLSearchParams(window.location.search).has("register")) {
-      selectTab("register");
-    }
+  const toRegister = document.getElementById("tab-register");
+  const toLogin = document.getElementById("tab-login");
+  if (toRegister) toRegister.addEventListener("click", () => show("register"));
+  if (toLogin) toLogin.addEventListener("click", () => show("login"));
+
+  // /auth/login?register=1 opens the registration form directly.
+  if (panels.register && new URLSearchParams(window.location.search).has("register")) {
+    show("register");
   }
 
-  /* --- show/hide password ------------------------------------------------- */
+  /* --- reveal password ---------------------------------------------------- */
 
-  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+  document.querySelectorAll("[data-reveal]").forEach((button) => {
     button.addEventListener("click", () => {
-      const input = document.getElementById(button.dataset.togglePassword);
+      const input = document.getElementById(button.dataset.reveal);
       const revealed = input.type === "text";
       input.type = revealed ? "password" : "text";
       button.textContent = revealed ? "Show" : "Hide";
@@ -72,12 +68,12 @@
     const password = document.getElementById("login-password").value;
 
     if (!email || !password) {
-      showError("login-error", "Please enter your email and password.");
+      showError("login-error", "Enter your email and password.");
       return;
     }
 
     const button = document.getElementById("login-submit");
-    HC.setBusy(button, true, "Signing in");
+    HC.setBusy(button, true);
 
     const result = await HC.api("/auth/api/login", {
       method: "POST",
@@ -112,7 +108,7 @@
       }
 
       const button = document.getElementById("register-submit");
-      HC.setBusy(button, true, "Creating account");
+      HC.setBusy(button, true);
 
       const result = await HC.api("/auth/api/register", {
         method: "POST",
@@ -122,15 +118,11 @@
       HC.setBusy(button, false);
 
       if (result.ok) {
-        HC.toast(
-          "Account created",
-          result.data.user.email + " · role: " + result.data.user.role,
-          "success"
-        );
+        HC.toast("Account created", result.data.user.email + " · " + result.data.user.role, "success");
         registerForm.reset();
-        // Prefill the sign-in form so the user only types the password again.
+        // Carry the address over so only the password has to be typed again.
         document.getElementById("login-email").value = result.data.user.email;
-        selectTab("login");
+        show("login");
         document.getElementById("login-password").focus();
       } else {
         showError("register-error", result.data.error || "Registration failed.");

@@ -234,62 +234,113 @@ front of gunicorn on `127.0.0.1:6002`. When TLS is terminated by nginx, set
 
 ---
 
-## 7. Frontend conventions
+## 7. Frontend conventions and visual language
 
-Vanilla HTML/CSS/JS, no framework, no build step, no CDN imports, no npm. The
-UI is meant to look like a real SaaS console, so treat it as a small design
-system rather than ad-hoc markup.
+Vanilla HTML/CSS/JS, no framework, no build step, no CDN, no npm, **no
+webfonts** (an external font request is a forbidden dependency).
+
+### The intended look
+
+An **infrastructure console**, not a marketing dashboard: dense rows, hairline
+rules instead of shadows, a warm-neutral greyscale, monospace for everything
+machine-generated, and exactly one accent colour used as punctuation.
+Reference points: Vercel Geist (restrained neutrality, mono numerals), Linear
+(hairlines, near-black surfaces, tight tracking), AWS Cloudscape compact
+density, GitHub Primer (14/12 px text scale).
+
+### Anti-patterns — do not reintroduce these
+
+They are the visual signature of generated UI and were deliberately removed:
+
+- **No gradients.** Not on panels, not on the brand mark, not on text, not as a
+  decorative background. Flat surfaces only.
+- **No indigo/violet accent.** The accent is ochre (`--accent`), and it is used
+  only for links, focus outlines and the active nav marker.
+- **The primary button is monochrome** — near-black on light, near-white on dark
+  (`--solid`). Never accent-coloured.
+- **No shadows on panels.** Shadows exist only on floating overlays (menu,
+  modal, toast) via `--shadow-overlay`.
+- **Small radii only** (`--r-xs` 2 px … `--r-lg` 6 px). No `rounded-xl` cards.
+  Pill shapes are limited to the 6 px status dot.
+- **No row of big-number cards.** Aggregate figures go into the `.metrics`
+  strip: one hairline box, inline cells, value in mono.
+- **No card-wrapping everything and no nested cards.** One flat `.panel` per
+  section; tables sit directly inside it.
+- **Empty states are one left-aligned line** of text (`.empty`), optionally with
+  a `<code>` pointer. No illustrations, no centred hero, no call-to-action art.
+- **No icons inside labelled buttons.** Icons appear in the sidebar and in
+  icon-only controls only.
+- **No status pills.** Status is a coloured 6 px dot plus the plain word
+  (`HC.status()`).
+- **No marketing copy.** Labels state what a thing is (`status = running`,
+  `0 rows`, `no service registered`), never how great it is. The sign-in page is
+  a single narrow centred card — no split hero, no feature list, no tagline.
 
 ### Files
 
-| file                            | role                                                      |
-| ------------------------------- | --------------------------------------------------------- |
-| `templates/base.html`           | HTML skeleton, favicon, theme bootstrap, toast region     |
-| `templates/_icons.html`         | hidden SVG sprite; every icon is a `<symbol id="i-...">`   |
-| `templates/login.html`          | split auth layout (brand panel + sign-in/register tabs)   |
-| `templates/dashboard.html`      | app shell: sidebar + topbar + four views                  |
-| `static/css/style.css`          | design tokens and all components                          |
-| `static/js/app.js`              | shared `HC` helpers, loaded on every page                 |
-| `static/js/login.js`            | auth page behaviour                                       |
-| `static/js/dashboard.js`        | console behaviour                                         |
+| file                        | role                                                    |
+| --------------------------- | ------------------------------------------------------- |
+| `templates/base.html`       | skeleton, favicon, theme bootstrap, toast region        |
+| `templates/_icons.html`     | 16x16 SVG sprite, `<symbol id="i-...">`                  |
+| `templates/login.html`      | centred sign-in / registration card                     |
+| `templates/dashboard.html`  | shell: sidebar + topbar + four views                    |
+| `static/css/style.css`      | tokens and all components                               |
+| `static/js/app.js`          | shared `HC` helpers, loaded on every page               |
+| `static/js/login.js`        | sign-in behaviour                                       |
+| `static/js/dashboard.js`    | console behaviour                                       |
 
-### Rules
+### Tokens
 
-- **Tokens only.** Every colour, radius, shadow and font comes from a custom
-  property in `:root` (`--brand-500`, `--surface`, `--radius`, `--shadow-sm`, …).
-  Never hardcode a hex value in a component.
-- **Both themes always.** Light is the default, dark follows
-  `prefers-color-scheme`, and an explicit choice is stored in `localStorage`
-  under `homecloud-theme` and applied as `data-theme` on `<html>`. Any new token
-  must be defined in the light block *and* in both dark blocks.
-- **Reuse the components** in `style.css` instead of inventing new markup:
-  `.btn` (+ `-primary` / `-ghost` / `-danger` / `-icon` / `-sm`), `.card` with
-  `.card-head`/`.card-body`/`.card-foot`, `.stat`, `.table`, `.badge`, `.chip`,
-  `.field` + `.input`/`.select`, `.empty-state`, `.skeleton`, `.menu`, `.toast`,
-  `.modal`.
-- **Icons** come from the sprite: `<svg><use href="#i-name"></use></svg>`. Add a
-  new 24x24 stroke symbol to `_icons.html` rather than pasting path data inline.
-- **Never use `innerHTML` with server data.** Build nodes and set `textContent`;
-  use the `HC.cell()` / `HC.statusBadge()` helpers (see `dashboard.js`).
-  `innerHTML` with a static literal string is acceptable.
-- **Every async action gives feedback**: `HC.setBusy(button, true, "Saving")` for
-  the button, `HC.renderSkeletonRows(tbody, rows, cols)` while a table loads,
-  `HC.toast(title, text, "success"|"error")` for the result, and an
-  `.empty-state` block whenever a list can be empty.
-- **All requests go through `HC.api(path, options)`** — it sets the JSON headers,
-  never throws, returns `{ok, status, data}`, and redirects to
-  `/auth/login?next=…` on `401`.
-- Timestamps from SQLite are UTC without a zone marker. Render them with
-  `HC.formatDateTime()` / `HC.formatRelative()`, which add the `Z` before parsing.
-- The console is a single page with client-side views switched by URL hash
-  (`#overview`, `#resources`, `#keys`, `#activity`). A new view means: a
-  `<section class="view" data-view="x">`, an entry in the `VIEWS` map, and a
-  `.nav-item[data-view="x"]` in the sidebar. Services that do not exist yet are
-  listed as `.nav-item.is-disabled` placeholders.
-- Accessibility is part of "done": one focus ring style for everything,
-  `aria-current="page"` on the active nav item, `aria-selected` on tabs,
-  `aria-busy` on loading buttons, `Escape` closes menus and modals, and the
-  layout stays usable down to 360 px (the sidebar becomes off-canvas at 860 px).
+Every colour, size, radius and spacing value is a custom property in `:root`.
+Never hardcode a hex value or a px font size in a component.
+
+- Greyscale: `--n-0` … `--n-900` (warm, no blue tint), mapped to roles
+  `--canvas`, `--surface`, `--surface-sunken/hover/active`, `--hairline`,
+  `--hairline-strong`, `--fg`, `--fg-secondary`, `--fg-muted`, `--fg-faint`.
+- Type scale: `--t-micro` 10.5 px (uppercase labels) · `--t-xs` 11.5 ·
+  `--t-sm` 12.5 · `--t-base` 13 (body) · `--t-md` 14 · `--t-lg` 16 · `--t-xl` 20.
+  Headings use negative tracking; only `.label-micro` uses positive tracking.
+- Fonts: `--sans` (system stack) and `--mono`. Mono is structural, not
+  decorative: ids, timestamps, counts, service types, breadcrumbs, key values.
+  `font-variant-numeric: tabular-nums` is set on `body`.
+- Density: rows are `--row-py` 7 px tall, nav items 26 px, buttons/inputs
+  26–28 px, topbar 44 px, sidebar 216 px.
+- Both themes are mandatory: light default, dark via `prefers-color-scheme`,
+  explicit choice in `localStorage` (`homecloud-theme`) applied as
+  `data-theme` on `<html>`. A new token must be added to the light block *and*
+  both dark blocks.
+
+### Components
+
+`.panel` (+ `.panel-head` / `.panel-body[.flush]` / `.panel-foot`), `.metrics` +
+`.metric`, `table.data` with `td.num` / `td.mono` / `td.primary` / `td.right`,
+`.status` + `.dot`, `.tag`, `.btn` (+ `-solid` / `-quiet` / `-link` / `-danger` /
+`-icon` / `-tall` / `-block`), `.field` + `.input` / `.select`, `.find` (filter
+box with a `/` hint), `.empty`, `.bar` (loading), `.menu`, `.scrim` + `.modal`,
+`.toast`, `.label-micro`, `.initials`, `kbd`.
+
+### Behaviour rules
+
+- **Never `innerHTML` with server data.** Build nodes and set `textContent`; use
+  `HC.cell()`, `HC.status()`, `HC.tag()`. A static literal string is fine.
+- All requests go through `HC.api(path, options)` — sets JSON headers, never
+  throws, returns `{ok, status, data}`, redirects to `/auth/login?next=…` on 401.
+- Feedback for every async action: `HC.setBusy(button, true)` (swaps the label
+  for a 11 px spinner), `HC.renderLoadingRows(tbody, rows, cols)` while a table
+  loads, `HC.toast(title, text, "success"|"error")` for the outcome.
+- Timestamps from SQLite are UTC without a marker — render with
+  `HC.formatDateTime()` (absolute, `YYYY-MM-DD HH:MM`) or `HC.formatAge()`
+  (`5m ago`). Both add the `Z` before parsing.
+- The console is one page with hash-routed views (`#overview`, `#resources`,
+  `#activity`, `#keys`). A new view needs a `<section class="view"
+  data-view="x">`, an entry in the `VIEWS` map and a `.nav-item[data-view="x"]`.
+  Services without a blueprint are `.nav-item.is-disabled` placeholders.
+- Keyboard: `/` focuses the resource filter, `Escape` closes menu, off-canvas
+  nav and modal. Keep new shortcuts single-key and non-destructive.
+- Accessibility is part of "done": one focus outline for everything,
+  `aria-current="page"` on the active nav item, `aria-busy` on loading buttons,
+  `aria-expanded` on disclosure controls, and a layout that works down to
+  360 px (the sidebar goes off-canvas at 820 px).
 
 ---
 

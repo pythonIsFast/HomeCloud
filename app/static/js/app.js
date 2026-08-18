@@ -1,7 +1,7 @@
 /* ===========================================================================
    HomeCloud shared frontend helpers.
-   Loaded on every page before the page-specific script. Exposes one global
-   object, HC, instead of using modules -- no build step, no import maps.
+   Loaded on every page before the page script. Exposes one global object, HC,
+   instead of ES modules -- no build step, no import maps.
    =========================================================================== */
 
 const HC = (function () {
@@ -30,12 +30,12 @@ const HC = (function () {
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch (e) {
-      /* private mode: the choice simply does not persist */
+      /* private mode: the choice just does not persist */
     }
     syncThemeIcons();
   }
 
-  // The button shows the icon of the theme you would switch *to*.
+  // The control shows the icon of the theme it would switch *to*.
   function syncThemeIcons() {
     const isDark = effectiveTheme() === "dark";
     document.querySelectorAll(".theme-icon-light").forEach((el) =>
@@ -49,9 +49,9 @@ const HC = (function () {
   function initThemeToggle() {
     syncThemeIcons();
     document.querySelectorAll("#theme-toggle").forEach((button) => {
-      button.addEventListener("click", () => {
-        applyTheme(effectiveTheme() === "dark" ? "light" : "dark");
-      });
+      button.addEventListener("click", () =>
+        applyTheme(effectiveTheme() === "dark" ? "light" : "dark")
+      );
     });
   }
 
@@ -81,16 +81,15 @@ const HC = (function () {
 
     el.appendChild(body);
     region.appendChild(el);
-    // Auto-dismiss; errors stay a bit longer so they can be read.
+    // Errors linger a little longer so they can be read.
     window.setTimeout(() => el.remove(), kind === "error" ? 7000 : 4000);
   }
 
   /* --- fetch wrapper ------------------------------------------------------ */
 
   /**
-   * Call the JSON API.
-   * Resolves to { ok, status, data }. A 401 means the session expired, so we
-   * send the user back to the login page instead of showing a broken view.
+   * Call the JSON API. Resolves to { ok, status, data } and never throws.
+   * A 401 means the session expired -> back to the sign-in page.
    */
   async function api(path, options) {
     const settings = Object.assign({ method: "GET", headers: {} }, options || {});
@@ -109,8 +108,7 @@ const HC = (function () {
     }
 
     if (response.status === 401 && !path.startsWith("/auth/api/login")) {
-      const next = encodeURIComponent(window.location.pathname);
-      window.location.href = "/auth/login?next=" + next;
+      window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname);
       return { ok: false, status: 401, data: {} };
     }
 
@@ -121,9 +119,9 @@ const HC = (function () {
     return { ok: response.ok, status: response.status, data };
   }
 
-  /* --- button loading state ---------------------------------------------- */
+  /* --- button busy state -------------------------------------------------- */
 
-  function setBusy(button, busy, busyLabel) {
+  function setBusy(button, busy) {
     if (!button) return;
     if (busy) {
       button.dataset.originalHtml = button.innerHTML;
@@ -133,7 +131,6 @@ const HC = (function () {
       const spinner = document.createElement("span");
       spinner.className = "spinner";
       button.appendChild(spinner);
-      if (busyLabel) button.appendChild(document.createTextNode(" " + busyLabel));
     } else {
       button.removeAttribute("aria-busy");
       button.disabled = false;
@@ -143,68 +140,94 @@ const HC = (function () {
 
   /* --- formatting --------------------------------------------------------- */
 
-  /** SQLite writes "YYYY-MM-DD HH:MM:SS" in UTC -- make that explicit. */
+  /** SQLite writes "YYYY-MM-DD HH:MM:SS" in UTC -- make the zone explicit. */
   function parseTimestamp(value) {
     if (!value) return null;
-    const date = new Date(value.replace(" ", "T") + "Z");
+    const date = new Date(String(value).replace(" ", "T") + "Z");
     return isNaN(date.getTime()) ? null : date;
   }
 
-  /** Short absolute time in the viewer's locale, e.g. "18 Aug, 16:22". */
+  /** Sortable-looking absolute stamp, e.g. "2026-08-18 16:22". */
   function formatDateTime(value) {
     const date = parseTimestamp(value);
-    if (!date) return "–";
-    return date.toLocaleString(undefined, {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!date) return "—";
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      date.getFullYear() +
+      "-" + pad(date.getMonth() + 1) +
+      "-" + pad(date.getDate()) +
+      " " + pad(date.getHours()) +
+      ":" + pad(date.getMinutes())
+    );
   }
 
-  /** "just now", "5 min ago", "3 h ago", "2 d ago", else an absolute date. */
-  function formatRelative(value) {
+  /** Compact relative age: "12s", "5m", "3h", "2d", else the absolute stamp. */
+  function formatAge(value) {
     const date = parseTimestamp(value);
-    if (!date) return "–";
+    if (!date) return "—";
 
-    const seconds = Math.round((Date.now() - date.getTime()) / 1000);
-    if (seconds < 45) return "just now";
-    if (seconds < 3600) return Math.round(seconds / 60) + " min ago";
-    if (seconds < 86400) return Math.round(seconds / 3600) + " h ago";
-    if (seconds < 604800) return Math.round(seconds / 86400) + " d ago";
+    const seconds = Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+    if (seconds < 60) return seconds + "s ago";
+    if (seconds < 3600) return Math.round(seconds / 60) + "m ago";
+    if (seconds < 86400) return Math.round(seconds / 3600) + "h ago";
+    if (seconds < 604800) return Math.round(seconds / 86400) + "d ago";
     return formatDateTime(value);
   }
 
-  /** Cell helper: a <td> with plain text (never innerHTML, never unescaped). */
+  /* --- table cell builders (never innerHTML with server data) -------------- */
+
   function cell(value, className) {
     const td = document.createElement("td");
     if (className) td.className = className;
     if (value instanceof Node) {
       td.appendChild(value);
     } else {
-      td.textContent = value === null || value === undefined || value === "" ? "–" : String(value);
+      const empty = value === null || value === undefined || value === "";
+      td.textContent = empty ? "—" : String(value);
+      if (empty) td.style.color = "var(--fg-faint)";
     }
     return td;
   }
 
-  /** Status pill for a resource state. */
-  function statusBadge(status) {
+  // Which lifecycle states count as good / transitional / bad.
+  const STATUS_TONE = {
+    running: "is-ok",
+    pending: "is-warn",
+    creating: "is-warn",
+    error: "is-bad",
+    stopped: "is-idle",
+    deleted: "is-idle",
+  };
+
+  /** Status as a coloured dot plus the word -- no pill, no background fill. */
+  function status(value) {
+    const wrap = document.createElement("span");
+    wrap.className = "status " + (STATUS_TONE[value] || "is-idle");
+    const dot = document.createElement("i");
+    dot.className = "dot";
+    wrap.appendChild(dot);
+    wrap.appendChild(document.createTextNode(value));
+    return wrap;
+  }
+
+  /** Mono tag for identifiers such as a service type. */
+  function tag(value) {
     const span = document.createElement("span");
-    span.className = "badge badge-" + String(status).replace(/[^a-z0-9-]/gi, "");
-    span.textContent = status;
+    span.className = "tag";
+    span.textContent = value;
     return span;
   }
 
-  /** Render N shimmering placeholder rows while a request is in flight. */
-  function renderSkeletonRows(tbody, rows, columns) {
+  /** Thin placeholder bars while a table loads. */
+  function renderLoadingRows(tbody, rows, columns) {
     const fragment = document.createDocumentFragment();
     for (let r = 0; r < rows; r++) {
       const tr = document.createElement("tr");
       for (let c = 0; c < columns; c++) {
         const td = document.createElement("td");
         const bar = document.createElement("div");
-        bar.className = "skeleton";
-        bar.style.width = 40 + ((r + c) % 4) * 15 + "%";
+        bar.className = "bar";
+        bar.style.width = 35 + ((r + c) % 4) * 14 + "%";
         td.appendChild(bar);
         tr.appendChild(td);
       }
@@ -220,7 +243,7 @@ const HC = (function () {
       await navigator.clipboard.writeText(text);
       return true;
     } catch (e) {
-      // Clipboard API needs a secure context (HTTPS or localhost).
+      // The clipboard API needs a secure context (HTTPS or localhost).
       return false;
     }
   }
@@ -232,10 +255,11 @@ const HC = (function () {
     toast,
     setBusy,
     cell,
-    statusBadge,
-    renderSkeletonRows,
+    status,
+    tag,
+    renderLoadingRows,
     formatDateTime,
-    formatRelative,
+    formatAge,
     copyToClipboard,
     applyTheme,
     effectiveTheme,

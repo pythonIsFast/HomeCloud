@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Console &middot; {{ app_name }}{% endblock %}
+{% block title %}Overview &middot; {{ app_name }}{% endblock %}
 
 {% block body %}
 <div class="shell" id="shell">
@@ -7,71 +7,71 @@
   {# ---------------------------------------------------------------- sidebar #}
   <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <span class="brand-mark"><svg><use href="#i-logo"></use></svg></span>
-      <span class="brand-text">
-        <span class="brand-name">{{ app_name }}</span>
-        <span class="brand-sub">Control plane</span>
-      </span>
+      <span class="brand-mark">H</span>
+      <span class="brand-name">{{ app_name }}</span>
     </div>
 
-    <nav aria-label="Main">
-      <button class="nav-item" data-view="overview" type="button">
-        <svg><use href="#i-grid"></use></svg><span class="nav-label">Overview</span>
-      </button>
-      <button class="nav-item" data-view="resources" type="button">
-        <svg><use href="#i-layers"></use></svg><span class="nav-label">Resources</span>
-        <span class="nav-count" id="nav-count-resources">0</span>
-      </button>
-      <button class="nav-item" data-view="keys" type="button">
-        <svg><use href="#i-key"></use></svg><span class="nav-label">API keys</span>
-        <span class="nav-count" id="nav-count-keys">0</span>
-      </button>
-      <button class="nav-item" data-view="activity" type="button">
-        <svg><use href="#i-activity"></use></svg><span class="nav-label">Activity</span>
-      </button>
+    <nav class="nav" aria-label="Main">
+      <div class="nav-group">
+        <button class="nav-item" data-view="overview" type="button">
+          <svg><use href="#i-grid"></use></svg><span class="nav-label">Overview</span>
+        </button>
+        <button class="nav-item" data-view="resources" type="button">
+          <svg><use href="#i-layers"></use></svg><span class="nav-label">Resources</span>
+          <span class="nav-count" id="nav-count-resources">0</span>
+        </button>
+        <button class="nav-item" data-view="activity" type="button">
+          <svg><use href="#i-activity"></use></svg><span class="nav-label">Activity</span>
+        </button>
+        <button class="nav-item" data-view="keys" type="button">
+          <svg><use href="#i-key"></use></svg><span class="nav-label">API keys</span>
+          <span class="nav-count" id="nav-count-keys">0</span>
+        </button>
+      </div>
 
-      <div class="nav-section">Services</div>
-      {# Placeholders on purpose: each becomes a blueprint under app/services/. #}
-      <span class="nav-item is-disabled" aria-disabled="true" title="Not installed yet">
-        <svg><use href="#i-cpu"></use></svg><span class="nav-label">Compute</span>
-        <span class="nav-count">Soon</span>
-      </span>
-      <span class="nav-item is-disabled" aria-disabled="true" title="Not installed yet">
-        <svg><use href="#i-bucket"></use></svg><span class="nav-label">Storage</span>
-        <span class="nav-count">Soon</span>
-      </span>
-      <span class="nav-item is-disabled" aria-disabled="true" title="Not installed yet">
-        <svg><use href="#i-database"></use></svg><span class="nav-label">Databases</span>
-        <span class="nav-count">Soon</span>
-      </span>
+      <div class="nav-group">
+        <div class="nav-heading label-micro">Services</div>
+        {# Placeholders: each becomes a blueprint under app/services/. #}
+        <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
+          <svg><use href="#i-cpu"></use></svg><span class="nav-label">Compute</span>
+          <span class="nav-count">—</span>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
+          <svg><use href="#i-bucket"></use></svg><span class="nav-label">Storage</span>
+          <span class="nav-count">—</span>
+        </span>
+        <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
+          <svg><use href="#i-database"></use></svg><span class="nav-label">Databases</span>
+          <span class="nav-count">—</span>
+        </span>
+      </div>
     </nav>
 
-    <div class="sidebar-footer">
-      <a class="nav-item" href="/healthz" target="_blank" rel="noopener">
-        <svg><use href="#i-book"></use></svg><span class="nav-label">Health check</span>
-      </a>
+    <div class="sidebar-foot">
+      <span class="meta">{{ app_name|lower }} · {{ user['role'] }}</span>
+      <a href="/healthz" target="_blank" rel="noopener">healthz</a>
     </div>
   </aside>
 
   {# ------------------------------------------------------------------- main #}
   <div class="main">
     <header class="topbar">
-      <button class="btn btn-ghost btn-icon sidebar-toggle" id="sidebar-toggle"
+      <button class="btn btn-quiet btn-icon sidebar-toggle" id="sidebar-toggle"
               type="button" aria-label="Toggle navigation" aria-expanded="false">
         <svg><use href="#i-menu"></use></svg>
       </button>
 
-      <nav class="breadcrumb" aria-label="Breadcrumb">
-        <span>{{ app_name }}</span>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <span>{{ app_name|lower }}</span>
         <span class="sep">/</span>
-        <span class="current" id="breadcrumb-current">Overview</span>
+        <span class="current" id="breadcrumb-current">overview</span>
       </nav>
 
       <div class="topbar-spacer"></div>
 
       <div class="topbar-actions">
-        <button class="btn btn-ghost btn-icon" id="theme-toggle" type="button"
-                aria-label="Toggle colour theme" title="Toggle colour theme">
+        <button class="btn btn-quiet btn-icon" id="theme-toggle" type="button"
+                aria-label="Switch colour theme" title="Switch colour theme">
           <svg class="theme-icon-light"><use href="#i-sun"></use></svg>
           <svg class="theme-icon-dark hidden"><use href="#i-moon"></use></svg>
         </button>
@@ -79,20 +79,19 @@
         <div class="menu-wrap">
           <button class="menu-trigger" id="user-menu-trigger" type="button"
                   aria-haspopup="true" aria-expanded="false">
-            <span class="avatar">{{ user['email'][:2] }}</span>
+            <span class="initials">{{ user['email'][:2] }}</span>
             <svg><use href="#i-chevron-down"></use></svg>
           </button>
           <div class="menu hidden" id="user-menu" role="menu">
-            <div class="menu-header">
-              <div class="email">{{ user['email'] }}</div>
-              <div class="text-xs muted">
-                Role: {{ user['role'] }} &middot; member since {{ user['created_at'][:10] }}
-              </div>
+            <div class="menu-meta">
+              <div class="who">{{ user['email'] }}</div>
+              <div class="what">uid={{ user['id'] }} role={{ user['role'] }}
+                since={{ user['created_at'][:10] }}</div>
             </div>
             <button class="menu-item" type="button" role="menuitem" data-view="keys">
-              <svg><use href="#i-key"></use></svg> Manage API keys
+              <svg><use href="#i-key"></use></svg> API keys
             </button>
-            <button class="menu-item danger" id="logout-button" type="button" role="menuitem">
+            <button class="menu-item is-danger" id="logout-button" type="button" role="menuitem">
               <svg><use href="#i-logout"></use></svg> Sign out
             </button>
           </div>
@@ -104,129 +103,102 @@
 
       {# ------------------------------------------------------- view: overview #}
       <section class="view" data-view="overview" hidden>
-        <div class="page-head">
+        <div class="view-head">
           <div>
             <h1>Overview</h1>
-            <p>Everything running in your {{ app_name }} installation, in one place.</p>
+            <p class="view-sub">
+              State of this installation. Services register their objects in the
+              shared resource table; the counts below read straight from it.
+            </p>
           </div>
-          <div class="page-head-actions">
-            <button class="btn" data-action="reload" type="button">
-              <svg><use href="#i-refresh"></use></svg> Refresh
-            </button>
-          </div>
-        </div>
-
-        <div class="stat-grid section">
-          <div class="stat">
-            <div class="stat-label"><svg><use href="#i-layers"></use></svg> Total resources</div>
-            <div class="stat-value" id="stat-total">&ndash;</div>
-            <div class="stat-hint" id="stat-total-hint">across all services</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label"><svg><use href="#i-check"></use></svg> Running</div>
-            <div class="stat-value" id="stat-running">&ndash;</div>
-            <div class="stat-hint">healthy and active</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label"><svg><use href="#i-activity"></use></svg> Needs attention</div>
-            <div class="stat-value" id="stat-attention">&ndash;</div>
-            <div class="stat-hint">pending, creating or errored</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label"><svg><use href="#i-key"></use></svg> API keys</div>
-            <div class="stat-value" id="stat-keys">&ndash;</div>
-            <div class="stat-hint">active machine credentials</div>
+          <div class="view-head-actions">
+            <button class="btn" data-action="reload" type="button">Refresh</button>
           </div>
         </div>
 
-        <div class="section">
-          <div class="card">
-            <div class="card-head">
-              <h2>Getting started</h2>
-              <span class="badge badge-info">Foundation ready</span>
-            </div>
-            <div class="card-body">
-              <p class="muted">
-                The control plane is up: accounts, sessions and the shared resource
-                registry all work. Services plug into that registry &mdash; each one
-                stores its objects as rows with its own service type, so this console
-                lists them without any change to the dashboard.
-              </p>
-              <ol class="text-sm muted" style="margin:14px 0 0;padding-left:20px;line-height:2">
-                <li>Create an API key to talk to the API from scripts or a CLI.</li>
-                <li>Add the first service blueprint under <code>app/services/</code>.</li>
-                <li>Register resources through the registry &mdash; they appear here instantly.</li>
-              </ol>
-            </div>
-            <div class="card-foot">
-              Signed in as <strong>{{ user['email'] }}</strong> ({{ user['role'] }}).
-              Sessions are signed JWTs in an HttpOnly cookie.
-            </div>
+        {# Metric strip instead of a row of big-number cards. #}
+        <div class="metrics">
+          <div class="metric">
+            <div class="label-micro">Resources</div>
+            <div class="metric-value" id="stat-total">–</div>
+            <div class="metric-note" id="stat-total-hint">&nbsp;</div>
+          </div>
+          <div class="metric">
+            <div class="label-micro">Running</div>
+            <div class="metric-value" id="stat-running">–</div>
+            <div class="metric-note">status = running</div>
+          </div>
+          <div class="metric">
+            <div class="label-micro">Not settled</div>
+            <div class="metric-value" id="stat-attention">–</div>
+            <div class="metric-note">pending, creating, error</div>
+          </div>
+          <div class="metric">
+            <div class="label-micro">API keys</div>
+            <div class="metric-value" id="stat-keys">–</div>
+            <div class="metric-note">active credentials</div>
           </div>
         </div>
 
-        <div class="section">
-          <div class="card">
-            <div class="card-head">
-              <h2>Recent activity</h2>
-              <button class="btn btn-sm btn-ghost" data-view="activity" type="button">View all</button>
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Latest activity</h2>
+            <div class="panel-head-actions">
+              <button class="btn btn-link" data-view="activity" type="button">All events</button>
             </div>
-            <div class="card-body tight">
-              <div class="table-wrap">
-                <table class="table">
-                  <thead>
-                    <tr><th>Action</th><th>Details</th><th>When</th></tr>
-                  </thead>
-                  <tbody id="overview-activity-body"></tbody>
-                </table>
-              </div>
-              <div id="overview-activity-empty" class="empty-state hidden">
-                <p class="muted">No activity recorded yet.</p>
-              </div>
+          </div>
+          <div class="panel-body flush">
+            <div class="table-scroll">
+              <table class="data">
+                <thead>
+                  <tr><th>Event</th><th>Detail</th><th>When</th></tr>
+                </thead>
+                <tbody id="overview-activity-body"></tbody>
+              </table>
             </div>
+            <div class="empty hidden" id="overview-activity-empty">No events recorded yet.</div>
           </div>
         </div>
       </section>
 
       {# ------------------------------------------------------ view: resources #}
       <section class="view" data-view="resources" hidden>
-        <div class="page-head">
+        <div class="view-head">
           <div>
             <h1>Resources</h1>
-            <p>
-              Every service object lives in one shared registry. Filter by service
-              type to narrow the list.
+            <p class="view-sub">
+              One table holds every service object, keyed by service type. Rows
+              appear here as soon as a service creates them.
             </p>
           </div>
-          <div class="page-head-actions">
-            <button class="btn" data-action="reload" type="button">
-              <svg><use href="#i-refresh"></use></svg> Refresh
-            </button>
+          <div class="view-head-actions">
+            <button class="btn" data-action="reload" type="button">Refresh</button>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-head">
-            <div class="toolbar" style="flex:1">
-              <div class="search">
+        <div class="panel">
+          <div class="panel-head">
+            <div class="toolbar">
+              <div class="find">
                 <svg><use href="#i-search"></use></svg>
                 <input class="input" id="resource-search" type="search"
-                       placeholder="Search by name or status" aria-label="Search resources">
+                       placeholder="Filter by name, type, status" aria-label="Filter resources">
+                <kbd>/</kbd>
               </div>
-              <select class="select" id="service-filter" aria-label="Filter by service type">
-                <option value="">All services</option>
+              <select class="select" id="service-filter" aria-label="Service type">
+                <option value="">All types</option>
               </select>
             </div>
           </div>
 
-          <div class="card-body tight">
-            <div class="table-wrap">
-              <table class="table" id="resources-table">
+          <div class="panel-body flush">
+            <div class="table-scroll">
+              <table class="data" id="resources-table">
                 <thead>
                   <tr>
-                    <th style="width:64px">ID</th>
+                    <th style="width:56px">ID</th>
                     <th>Name</th>
-                    <th>Service</th>
+                    <th>Type</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th>Updated</th>
@@ -236,123 +208,105 @@
               </table>
             </div>
 
-            <div class="empty-state hidden" id="resources-empty">
-              <svg class="empty-art"><use href="#i-empty-box"></use></svg>
-              <h3>No resources yet</h3>
-              <p>
-                Nothing has been provisioned. As soon as a service creates its first
-                object, it shows up in this table &mdash; no dashboard change needed.
-              </p>
+            <div class="empty hidden" id="resources-empty">
+              <strong>No resources.</strong> Register the first service blueprint under
+              <code>app/services/</code> and create rows through
+              <code>core.resources.create()</code> — they show up here without any
+              dashboard change.
             </div>
 
-            <div class="empty-state hidden" id="resources-no-match">
-              <h3>No matches</h3>
-              <p>No resource matches your search or filter.</p>
+            <div class="empty hidden" id="resources-no-match">
+              No resource matches the current filter.
             </div>
           </div>
 
-          <div class="card-foot" id="resources-foot">&nbsp;</div>
-        </div>
-      </section>
-
-      {# ----------------------------------------------------------- view: keys #}
-      <section class="view" data-view="keys" hidden>
-        <div class="page-head">
-          <div>
-            <h1>API keys</h1>
-            <p>
-              Long-lived credentials for scripts and CLIs. Send them as the
-              <code>X-API-Key</code> header. Only a hash is stored &mdash; a key is
-              shown exactly once, at creation.
-            </p>
-          </div>
-        </div>
-
-        <div class="card section">
-          <div class="card-head"><h2>Create a key</h2></div>
-          <div class="card-body">
-            <form id="create-key-form" autocomplete="off">
-              <div class="field">
-                <label class="label" for="key-label">Label</label>
-                <div class="input-group">
-                  <input class="input" id="key-label" name="label" maxlength="100"
-                         placeholder="e.g. backup-script on nas01">
-                  <button class="btn btn-primary" type="submit" id="create-key-submit">
-                    <svg><use href="#i-plus"></use></svg> Create key
-                  </button>
-                </div>
-                <p class="field-hint">
-                  A label only helps you recognise the key later; it is not a secret.
-                </p>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head"><h2>Your keys</h2></div>
-          <div class="card-body tight">
-            <div class="table-wrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th style="width:64px">ID</th>
-                    <th>Label</th>
-                    <th>Created</th>
-                    <th>Last used</th>
-                    <th class="cell-actions">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="keys-body"></tbody>
-              </table>
-            </div>
-            <div class="empty-state hidden" id="keys-empty">
-              <svg class="empty-art"><use href="#i-empty-box"></use></svg>
-              <h3>No API keys</h3>
-              <p>Create a key above to use the {{ app_name }} API without a browser session.</p>
-            </div>
-          </div>
+          <div class="panel-foot" id="resources-foot">&nbsp;</div>
         </div>
       </section>
 
       {# ------------------------------------------------------- view: activity #}
       <section class="view" data-view="activity" hidden>
-        <div class="page-head">
+        <div class="view-head">
           <div>
             <h1>Activity</h1>
-            <p>
-              Append-only audit trail.
-              {% if user['role'] == 'admin' %}As an admin you see events from all users.
-              {% else %}You see your own events.{% endif %}
+            <p class="view-sub">
+              Append-only audit trail, newest first, 50 most recent entries.
+              {% if user['role'] == 'admin' %}Admin scope: all users.
+              {% else %}Scope: your own events.{% endif %}
             </p>
           </div>
-          <div class="page-head-actions">
-            <button class="btn" data-action="reload" type="button">
-              <svg><use href="#i-refresh"></use></svg> Refresh
-            </button>
+          <div class="view-head-actions">
+            <button class="btn" data-action="reload" type="button">Refresh</button>
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-body tight">
-            <div class="table-wrap">
-              <table class="table">
+        <div class="panel">
+          <div class="panel-body flush">
+            <div class="table-scroll">
+              <table class="data">
                 <thead>
                   <tr>
-                    <th style="width:64px">ID</th>
-                    <th>Action</th>
+                    <th style="width:56px">ID</th>
+                    <th>Event</th>
                     <th>Resource</th>
-                    <th>Details</th>
+                    <th>Detail</th>
                     <th>When</th>
                   </tr>
                 </thead>
                 <tbody id="activity-body"></tbody>
               </table>
             </div>
-            <div class="empty-state hidden" id="activity-empty">
-              <svg class="empty-art"><use href="#i-empty-box"></use></svg>
-              <h3>Nothing logged yet</h3>
-              <p>Logins, key changes and resource operations will appear here.</p>
+            <div class="empty hidden" id="activity-empty">Nothing logged yet.</div>
+          </div>
+        </div>
+      </section>
+
+      {# ----------------------------------------------------------- view: keys #}
+      <section class="view" data-view="keys" hidden>
+        <div class="view-head">
+          <div>
+            <h1>API keys</h1>
+            <p class="view-sub">
+              Machine credentials for scripts and CLIs. Send as
+              <code>X-API-Key</code>. Stored as a SHA-256 hash — the key itself is
+              shown once, at creation.
+            </p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>New key</h2></div>
+          <div class="panel-body">
+            <form id="create-key-form" autocomplete="off">
+              <div class="row">
+                <input class="input" id="key-label" name="label" maxlength="100"
+                       placeholder="Label, e.g. backup-script@nas01" aria-label="Key label">
+                <button class="btn btn-solid" type="submit" id="create-key-submit">Create</button>
+              </div>
+              <p class="field-note">The label is not a secret; it only helps you recognise the key.</p>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Existing keys</h2></div>
+          <div class="panel-body flush">
+            <div class="table-scroll">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th style="width:56px">ID</th>
+                    <th>Label</th>
+                    <th>Created</th>
+                    <th>Last used</th>
+                    <th style="width:80px"></th>
+                  </tr>
+                </thead>
+                <tbody id="keys-body"></tbody>
+              </table>
+            </div>
+            <div class="empty hidden" id="keys-empty">
+              No keys yet. Create one above to reach the API without a browser session.
             </div>
           </div>
         </div>
@@ -362,26 +316,22 @@
   </div>
 </div>
 
-{# Modal shown once after a key is created -- the only moment the secret exists. #}
-<div class="modal-backdrop hidden" id="key-modal" role="dialog" aria-modal="true"
+{# Shown once after creation -- the only moment the plaintext key exists. #}
+<div class="scrim hidden" id="key-modal" role="dialog" aria-modal="true"
      aria-labelledby="key-modal-title">
   <div class="modal">
-    <div class="modal-head">
-      <h2 id="key-modal-title">Your new API key</h2>
-      <p class="text-sm muted" style="margin-top:6px">
-        Copy it now. It is stored only as a hash and cannot be shown again.
+    <div class="modal-head"><h2 id="key-modal-title">New API key</h2></div>
+    <div class="modal-body">
+      <div class="secret-out">
+        <code id="key-modal-secret"></code>
+        <button class="btn" id="key-modal-copy" type="button">Copy</button>
+      </div>
+      <p class="field-note">
+        Copy it now. Only the hash is stored, so this value cannot be shown again.
       </p>
     </div>
-    <div class="modal-body">
-      <div class="secret-box">
-        <code id="key-modal-secret"></code>
-        <button class="btn btn-sm" id="key-modal-copy" type="button">
-          <svg><use href="#i-copy"></use></svg> Copy
-        </button>
-      </div>
-    </div>
     <div class="modal-foot">
-      <button class="btn btn-primary" id="key-modal-close" type="button">Done</button>
+      <button class="btn btn-solid" id="key-modal-close" type="button">Done</button>
     </div>
   </div>
 </div>
