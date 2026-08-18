@@ -19,6 +19,7 @@ class ServeoError(Exception):
 
 URL_RE = re.compile(r"https://[a-z0-9.-]+", re.IGNORECASE)
 SYSTEM_SSH_PROXY_CONFIG = "/etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf"
+URL_WAIT_SECONDS = 15
 
 
 def require_tools():
@@ -85,12 +86,16 @@ def _reap(pid):
 
 
 def start(vm_dir, guest_ip, port, subdomain=""):
-    """Start a detached SSH remote forward and return its pid and URL."""
+    """Start a Serveo remote forward and wait until it announces its URL."""
     require_tools()
     os.makedirs(vm_dir, exist_ok=True)
     remote = f"{subdomain}:80:{guest_ip}:{int(port)}" if subdomain else f"80:{guest_ip}:{int(port)}"
     command = [
-        "ssh", "-N", "-T",
+        # Do not use ``-N`` here.  Serveo sends the assigned public URL through
+        # its remote command output; ``-N`` suppresses that channel while
+        # leaving the forward alive, which made the UI wait forever for a URL.
+        "ssh", "-T",
+        "-o", "BatchMode=yes",
         "-o", "ExitOnForwardFailure=yes",
         "-o", "ConnectTimeout=10",
         "-o", "ServerAliveInterval=30",
@@ -110,16 +115,31 @@ def start(vm_dir, guest_ip, port, subdomain=""):
             start_new_session=True,
         )
 
-    deadline = time.monotonic() + 8
-    url = None
+    deadline = time.monotonic() + URL_WAIT_SECONDS
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise ServeoError(read_error(vm_dir))
         url = read_url(vm_dir)
         if url:
-            break
+            return {"pid": process.pid, "url": url}
         time.sleep(0.2)
-    return {"pid": process.pid, "url": url}
+
+    # A running SSH process is not sufficient: without the announced URL the
+    # tunnel cannot be used from the UI.  Tear it down instead of persisting an
+    # unresolvable "waiting for URL" state.
+    try:
+        process.terminate()
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+    except OSError:
+        pass
+    details = read_error(vm_dir)
+    raise ServeoError(
+        f"Serveo did not announce a public URL within {URL_WAIT_SECONDS} seconds. "
+        f"{details}"
+    )
 
 
 def stop(pid):

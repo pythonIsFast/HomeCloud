@@ -504,9 +504,21 @@ class Worker:
                 tunnel = dict(config.get("serveo") or {})
                 if tunnel.get("enabled"):
                     if serveo.is_alive(tunnel.get("pid")):
-                        url = serveo.read_url(self.vm_dir(row["id"])) or tunnel.get("url")
-                        if url != tunnel.get("url") or tunnel.get("status") != "running":
-                            tunnel.update({"status": "running", "url": url, "error": None})
+                        url = serveo.read_url(self.vm_dir(row["id"]))
+                        if url:
+                            if url != tunnel.get("url") or tunnel.get("status") != "running":
+                                tunnel.update({"status": "running", "url": url, "error": None})
+                                resources.merge_config(row["id"], {"serveo": tunnel})
+                        else:
+                            # Clean up stale tunnels created by older versions,
+                            # which treated an alive SSH process as success even
+                            # though Serveo had not provided a public URL.
+                            serveo.stop(tunnel.get("pid"))
+                            tunnel.update({
+                                "status": "error", "pid": None, "url": None,
+                                "error": "Serveo did not announce a public URL. "
+                                         "Start the tunnel again to retry.",
+                            })
                             resources.merge_config(row["id"], {"serveo": tunnel})
                     elif tunnel.get("status") not in ("error", "offline"):
                         tunnel.update({"status": "error", "pid": None, "url": None,
