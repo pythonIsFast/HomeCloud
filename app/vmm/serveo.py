@@ -85,7 +85,7 @@ def _reap(pid):
         pass
 
 
-def start(vm_dir, guest_ip, port, subdomain=""):
+def start(vm_dir, guest_ip, port, subdomain="", username="homecloud"):
     """Start a Serveo remote forward and wait until it announces its URL."""
     require_tools()
     os.makedirs(vm_dir, exist_ok=True)
@@ -95,7 +95,13 @@ def start(vm_dir, guest_ip, port, subdomain=""):
         # its remote command output; ``-N`` suppresses that channel while
         # leaving the forward alive, which made the UI wait forever for a URL.
         "ssh", "-T",
+        # The worker deliberately runs as root, but root is not a valid
+        # anonymous Serveo login.  Also do not offer the host's SSH keys: a
+        # public tunnel must work without creating, storing, or trusting one.
+        "-l", username,
         "-o", "BatchMode=yes",
+        "-o", "PubkeyAuthentication=no",
+        "-o", "IdentityAgent=none",
         "-o", "ExitOnForwardFailure=yes",
         "-o", "ConnectTimeout=10",
         "-o", "ServerAliveInterval=30",

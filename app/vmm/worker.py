@@ -179,6 +179,7 @@ class Worker:
                 config.get("ip"),
                 tunnel.get("port"),
                 tunnel.get("subdomain", ""),
+                f"homecloud-vm-{row['id']}",
             )
         except Exception as error:
             tunnel.update({"status": "error", "pid": None, "url": None,
