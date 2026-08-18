@@ -102,7 +102,9 @@
     <main class="content">
 
       {# ------------------------------------------------------- view: overview #}
-      <section class="view" data-view="overview" hidden>
+      {# Overview remains visible without JavaScript, so a bad cached asset can
+         never turn a successful sign-in into an empty application shell. #}
+      <section class="view" data-view="overview">
         <div class="view-head">
           <div>
             <h1>Overview</h1>
@@ -800,10 +802,10 @@
 {% block scripts %}
 {# Order matters: the shell first, then the per-view scripts that register
    themselves with it through window.HCViews. #}
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
-<script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
-<script src="{{ url_for('static', filename='js/compute.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/terminal.js') }}?v={{ static_version }}"></script>
+<script src="{{ url_for('static', filename='js/compute.js') }}?v={{ static_version }}"></script>
 {% if user['role'] == 'admin' %}
-<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin.js') }}?v={{ static_version }}"></script>
 {% endif %}
 {% endblock %}

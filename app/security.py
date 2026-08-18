@@ -80,7 +80,7 @@ def register(app):
             f"script-src 'self' 'nonce-{g.csp_nonce}'; connect-src 'self'; "
             "base-uri 'self'; frame-ancestors 'none'",
         )
-        if request.path.startswith(("/auth/", "/api/", "/compute/")):
+        if request.path == "/" or request.path.startswith(("/auth/", "/api/", "/compute/")):
             response.headers.setdefault("Cache-Control", "no-store")
         return response
 

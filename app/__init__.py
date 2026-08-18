@@ -61,6 +61,20 @@ def create_app(test_config=None):
 
     app.register_blueprint(compute_bp)
 
+    @app.context_processor
+    def static_asset_version():
+        """Version static assets by mtime so a deploy cannot mix old JS and HTML."""
+        latest = 0
+        for relative_path in (
+            "css/style.css", "js/app.js", "js/login.js", "js/dashboard.js",
+            "js/terminal.js", "js/compute.js", "js/admin.js",
+        ):
+            try:
+                latest = max(latest, os.stat(os.path.join(app.static_folder, relative_path)).st_mtime_ns)
+            except OSError:
+                continue
+        return {"static_version": latest}
+
     return app
 
 

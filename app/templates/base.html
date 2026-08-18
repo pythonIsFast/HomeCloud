@@ -19,7 +19,7 @@
     })();
   </script>
 
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ static_version }}">
 </head>
 <body>
   {% include "_icons.html" %}
@@ -28,7 +28,7 @@
 
   <div class="toasts" id="toast-region" role="status" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v={{ static_version }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
