@@ -30,6 +30,7 @@
     detailTimer: null,
     consoleOffset: 0,
     consoleTimer: null,
+    consoleLoading: false,
     pendingTerminalInput: "",
     terminalInputTimer: null,
     terminalInputSending: false,
@@ -299,8 +300,11 @@
     clearConsoleTimer();
     if (!state.detailId) return;
     state.consoleTimer = window.setTimeout(async () => {
-      await refreshConsole();
-      scheduleConsolePoll(350);
+      const more = await refreshConsole();
+      // A serial console is interactive: 350 ms made echoed keystrokes feel
+      // remote. Keep the local poll light but fast, and drain a backlog in the
+      // next frame instead of making the user wait for it.
+      scheduleConsolePoll(more ? 0 : 80);
     }, delay);
   }
 
@@ -381,14 +385,16 @@
   }
 
   async function refreshConsole() {
-    if (!state.detailId) return;
+    if (!state.detailId || state.consoleLoading) return false;
+    state.consoleLoading = true;
     const result = await HC.api(
       "/compute/api/instances/" + state.detailId + "/console?after=" + state.consoleOffset
     );
+    state.consoleLoading = false;
     if (!result.ok) {
       terminal.clear();
       terminal.write(result.data.error || "HTTP " + result.status);
-      return;
+      return false;
     }
     const wasAtBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 24;
     if (result.data.reset || state.consoleOffset === 0) {
@@ -402,6 +408,7 @@
     }
     state.consoleOffset = result.data.offset || state.consoleOffset;
     if (wasAtBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
+    return Boolean(result.data.more);
   }
 
   document.getElementById("console-refresh").addEventListener("click", () => {
@@ -438,6 +445,10 @@
       if (!result.ok) {
         HC.toast("Terminal " + (label || "input") + " failed",
           result.data.error || "HTTP " + result.status, "error");
+      } else {
+        // The guest normally echoes input. Ask for that output as soon as the
+        // worker has accepted the keystroke instead of waiting for the timer.
+        window.setTimeout(() => refreshConsole(), 10);
       }
     } finally {
       state.terminalInputSending = false;
