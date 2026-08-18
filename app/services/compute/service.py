@@ -227,6 +227,53 @@ def update_firewall(user, resource_id, rules):
     return resources.get(user["id"], resource_id)
 
 
+def change_flavor(user, resource_id, flavor_name):
+    """Change an existing instance size, growing its disk when necessary."""
+    row = resources.get(user["id"], resource_id)
+    if row is None or row["service_type"] != SERVICE_TYPE:
+        raise ComputeError("instance not found", status=404)
+    if row["status"] not in ("running", "stopped"):
+        raise ComputeError("instance must be running or stopped to change its type", status=409)
+
+    flavor = flavors.get(flavor_name)
+    if flavor is None:
+        raise ComputeError(f"unknown flavor: {flavor_name!r}")
+
+    current = resources.to_dict(row)["config"]
+    old_disk = int(current.get("disk_gb", 0))
+    if flavor["disk_gb"] < old_disk:
+        raise ComputeError(
+            f"disk cannot be reduced from {old_disk} GB to {flavor['disk_gb']} GB"
+        )
+
+    used = limits.usage(user["id"], SERVICE_TYPE)
+    allowed = limits.effective(user["id"])
+    projected = {
+        "vcpu": used["vcpu"] - int(current.get("vcpu", 0)) + flavor["vcpu"],
+        "memory_mb": used["memory_mb"] - int(current.get("memory_mb", 0)) + flavor["memory_mb"],
+        "disk_gb": used["disk_gb"] - old_disk + flavor["disk_gb"],
+    }
+    for field, label, suffix in (("vcpu", "vCPU", ""), ("memory_mb", "memory", " MB"),
+                                 ("disk_gb", "disk", " GB")):
+        cap = allowed["max_" + field]
+        if projected[field] > cap:
+            raise ComputeError(f"{label} quota exceeded: {projected[field]}{suffix} > {cap}{suffix}", status=409)
+
+    previous_status = row["status"]
+    if not resources.transition(resource_id, previous_status, "resizing"):
+        raise ComputeError("instance changed state; try again", status=409)
+
+    config = dict(current)
+    config.update({"flavor": flavor["name"], "vcpu": flavor["vcpu"],
+                  "memory_mb": flavor["memory_mb"], "disk_gb": flavor["disk_gb"]})
+    resources.set_config(resource_id, config)
+    jobs.enqueue("resize", resource_id=resource_id, user_id=user["id"],
+                 payload={"was_running": previous_status == "running"})
+    audit.log_action(user["id"], "compute.resize_requested", resource_id,
+                     {"flavor": flavor["name"]})
+    return resources.get(user["id"], resource_id)
+
+
 # --- actions ----------------------------------------------------------------
 
 

@@ -316,6 +316,24 @@ class Worker:
         audit.log_action(job["user_id"], "compute.image_import", image["id"],
                          {"sha256": checksum})
 
+    def do_resize(self, job):
+        """Apply a new CPU/RAM size and grow the disk while the VM is offline."""
+        row = resources.get_any(job["resource_id"])
+        if row is None:
+            raise RuntimeError("resource no longer exists")
+        payload = jobs.payload_of(job)
+        config = self.config_of(row)
+        if payload.get("was_running"):
+            self.do_stop(job)
+        rootfs = config.get("rootfs") or os.path.join(self.vm_dir(row["id"]), "rootfs.ext4")
+        images.resize_vm_disk(rootfs, config.get("disk_gb", 1))
+        if payload.get("was_running"):
+            self.do_start(job)
+        else:
+            resources.set_status(row["id"], "stopped")
+        audit.log_action(job["user_id"], "compute.resize", row["id"],
+                         {"flavor": config.get("flavor")})
+
     def do_update(self, job):
         """Start the fixed root-owned updater outside this worker service."""
         self.log(f"job {job['id']}: starting platform update service")

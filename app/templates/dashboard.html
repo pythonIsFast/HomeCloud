@@ -490,6 +490,19 @@
             <div><span class="label-micro">Created</span><strong id="vm-detail-created">–</strong></div>
           </div>
         </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Instance type</h2></div>
+          <div class="panel-body">
+            <form id="vm-flavor-form" class="field-row" autocomplete="off">
+              <div class="field field-grow">
+                <label class="field-label" for="vm-detail-flavor-select">Size</label>
+                <select class="select" id="vm-detail-flavor-select" aria-label="Instance type"></select>
+                <p class="field-note" id="vm-detail-flavor-note">Changing a running instance restarts it. Disk size can only grow.</p>
+              </div>
+              <button class="btn btn-solid" id="vm-detail-flavor-submit" type="submit">Apply instance type</button>
+            </form>
+          </div>
+        </div>
         </div>
 
         <div class="vm-tab-panel" data-vm-panel="terminal" hidden>

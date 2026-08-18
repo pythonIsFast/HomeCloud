@@ -145,6 +145,22 @@ def create_vm_disk(base_image, target_path, disk_gb):
     return target_path
 
 
+def resize_vm_disk(target_path, disk_gb):
+    """Grow an existing ext4 VM disk without replacing guest data."""
+    require_tools()
+    if not os.path.isfile(target_path):
+        raise ImageError("VM disk is missing")
+    target_size = int(disk_gb) * 1024 ** 3
+    if os.path.getsize(target_path) > target_size:
+        raise ImageError("VM disk cannot be shrunk")
+    if os.path.getsize(target_path) == target_size:
+        return target_path
+    _run(["truncate", "-s", f"{int(disk_gb)}G", target_path])
+    _run(["e2fsck", "-fp", target_path], check=False)
+    _run(["resize2fs", target_path])
+    return target_path
+
+
 def remove_vm_dir(vm_dir):
     """Delete a VM's directory including its disk. Never raises."""
     shutil.rmtree(vm_dir, ignore_errors=True)

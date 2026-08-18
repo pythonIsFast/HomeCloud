@@ -160,6 +160,16 @@ def instance_action(resource_id, action):
     return _handle(run)
 
 
+@bp.put("/api/instances/<int:resource_id>/flavor")
+@guards.login_required
+def change_instance_flavor(resource_id):
+    user = guards.current_user()
+    flavor_name = (_payload().get("flavor") or "").strip()
+    return _handle(lambda: jsonify({"instance": service.public_view(
+        service.change_flavor(user, resource_id, flavor_name)
+    )}), 202)
+
+
 @bp.delete("/api/instances/<int:resource_id>")
 @guards.login_required
 def delete_instance(resource_id):

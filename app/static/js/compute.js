@@ -48,7 +48,7 @@
 
   // States in which the worker is about to change something, so the view keeps
   // polling until they settle.
-  const BUSY = ["pending", "creating", "stopping", "deleting"];
+  const BUSY = ["pending", "creating", "stopping", "resizing", "deleting"];
 
   /* --- quota strip -------------------------------------------------------- */
 
@@ -497,6 +497,7 @@
     document.getElementById("vm-detail-ip").textContent = instance.ip || "no network address yet";
     document.getElementById("vm-detail-id").textContent = "#" + instance.id;
     document.getElementById("vm-detail-flavor").textContent = instance.flavor || "Custom";
+    renderFlavorEditor(instance);
     document.getElementById("vm-detail-address").textContent = instance.ip || "Not assigned";
     document.getElementById("vm-detail-created").textContent = HC.formatDateTime(instance.created_at);
     const firewallRules = document.getElementById("vm-firewall-rules");
@@ -535,6 +536,21 @@
       detailActions.appendChild(actionButton("Start", instance, "start"));
     }
     detailActions.appendChild(actionButton("Delete", instance, "delete", true));
+  }
+
+  function renderFlavorEditor(instance) {
+    const select = document.getElementById("vm-detail-flavor-select");
+    const submit = document.getElementById("vm-detail-flavor-submit");
+    select.replaceChildren(...state.flavors.map((flavor) => {
+      const option = new Option(flavor.name, flavor.name);
+      option.textContent = flavor.name + " · " + flavor.vcpu + " vCPU · " +
+        flavor.memory_mb + " MB · " + flavor.disk_gb + " GB";
+      return option;
+    }));
+    select.value = instance.flavor || "";
+    const disabled = BUSY.includes(instance.status) || instance.status === "deleted";
+    select.disabled = disabled;
+    submit.disabled = disabled;
   }
 
   async function createSnapshot(instance, name, button) {
@@ -663,6 +679,30 @@
       source: document.getElementById("firewall-source").value,
     };
     saveFirewall(instance, (instance.firewall || []).concat(rule));
+  });
+
+  document.getElementById("vm-flavor-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const instance = state.detailInstance;
+    if (!instance) return;
+    const flavor = document.getElementById("vm-detail-flavor-select").value;
+    if (!flavor || flavor === instance.flavor) return;
+    const message = instance.status === "running"
+      ? "Changing the instance type will restart this VM. Continue?"
+      : "Apply this new instance type?";
+    if (!window.confirm(message)) return;
+    const button = document.getElementById("vm-detail-flavor-submit");
+    HC.setBusy(button, true);
+    const result = await HC.api("/compute/api/instances/" + instance.id + "/flavor", {
+      method: "PUT", body: { flavor },
+    });
+    HC.setBusy(button, false);
+    if (!result.ok) {
+      HC.toast("Instance type change failed", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    HC.toast("Instance type queued", flavor, "success");
+    await Promise.all([load(false), loadFlavors(), loadDetail(instance.id)]);
   });
 
   function queueTerminalInput(input, label, delay) {
