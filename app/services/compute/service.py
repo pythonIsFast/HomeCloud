@@ -14,6 +14,7 @@ from . import flavors
 
 SERVICE_TYPE = "compute"
 IMAGE_TYPE = "compute_image"
+MAX_IMAGES_PER_USER = 10
 
 # Instance names end up in a tap device name and a directory, so keep them tame.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
@@ -160,7 +161,9 @@ def image_view(row):
     config = data["config"]
     return {"id": data["id"], "name": data["name"], "status": data["status"],
             "created_at": data["created_at"], "size_bytes": config.get("size_bytes", 0),
-            "sha256": config.get("sha256"), "source_instance_id": config.get("source_instance_id")}
+            "sha256": config.get("sha256"), "source_instance_id": config.get("source_instance_id"),
+            "source": config.get("source", "snapshot"), "verified": config.get("verified", False),
+            "last_error": config.get("last_error")}
 
 
 def list_images(user):
@@ -177,9 +180,35 @@ def snapshot(user, source_id, name):
     if resources.get_by_name(user["id"], IMAGE_TYPE, name):
         raise ComputeError(f"you already have an image named {name!r}", status=409)
     image_id = resources.create(user["id"], IMAGE_TYPE, name,
-        {"source_instance_id": source_id}, status="pending")
+        {"source": "snapshot", "source_instance_id": source_id, "verified": False},
+        status="pending")
     jobs.enqueue("snapshot", resource_id=image_id, user_id=user["id"], payload={"source_id": source_id})
     audit.log_action(user["id"], "compute.snapshot_requested", image_id, {"source": source_id})
+    return resources.get(user["id"], image_id)
+
+
+def validate_image_import(user, name):
+    name = validate_name(name)
+    if resources.get_by_name(user["id"], IMAGE_TYPE, name):
+        raise ComputeError(f"you already have an image named {name!r}", status=409)
+    active = [row for row in resources.list_for_user(user["id"], IMAGE_TYPE)
+              if row["status"] not in ("deleted", "error")]
+    if len(active) >= MAX_IMAGES_PER_USER:
+        raise ComputeError(f"image limit reached ({MAX_IMAGES_PER_USER})", status=409)
+    return name
+
+
+def import_image(user, name, staged_path, filename, size_bytes, checksum):
+    """Register an already bounded upload for asynchronous host validation."""
+    name = validate_image_import(user, name)
+    image_id = resources.create(user["id"], IMAGE_TYPE, name, {
+        "source": "upload", "original_filename": filename,
+        "staged_path": staged_path, "size_bytes": int(size_bytes),
+        "sha256": checksum, "verified": False,
+    }, status="pending")
+    jobs.enqueue("import_image", resource_id=image_id, user_id=user["id"])
+    audit.log_action(user["id"], "compute.image_upload_requested", image_id,
+                     {"filename": filename, "size_bytes": int(size_bytes)})
     return resources.get(user["id"], image_id)
 
 

@@ -64,6 +64,7 @@ def build_config(instance_path):
         ),
         "VM_DIR": os.path.join(instance_path, "vms"),
         "IMAGE_DIR": os.path.join(instance_path, "images"),
+        "UPLOAD_DIR": os.path.join(instance_path, "uploads"),
         "VM_KERNEL": os.environ.get(
             "HOMECLOUD_VM_KERNEL",
             os.path.join(instance_path, "images", "vmlinux-6.1.155"),

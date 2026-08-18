@@ -101,7 +101,7 @@ User=homecloud
 Group=homecloud
 WorkingDirectory=${PROJECT_DIR}
 EnvironmentFile=${ENV_FILE}
-ExecStart=${PROJECT_DIR}/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:6002 wsgi:app
+ExecStart=${PROJECT_DIR}/.venv/bin/gunicorn --worker-class gthread --workers 2 --threads 8 --bind 127.0.0.1:6002 wsgi:app
 Restart=on-failure
 RestartSec=3
 
@@ -134,9 +134,14 @@ cat > /etc/nginx/sites-available/homecloud <<'EOF'
 server {
     listen 80;
     server_name _;
+    client_max_body_size 2048m;
 
     location / {
         proxy_pass http://127.0.0.1:6002;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -159,4 +164,3 @@ echo "HomeCloud is installed."
 echo "Open this host's HTTP address, register the first account, then set"
 echo "HOMECLOUD_ALLOW_REGISTRATION=0 in ${ENV_FILE} and restart both services."
 echo "Configure HTTPS and set HOMECLOUD_COOKIE_SECURE=1 before exposing it publicly."
-

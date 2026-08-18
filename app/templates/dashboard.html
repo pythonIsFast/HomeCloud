@@ -329,6 +329,7 @@
           </div>
           <div class="view-head-actions">
             <button class="btn" data-action="reload" type="button">Refresh</button>
+            <button class="btn" id="image-upload-toggle" type="button">Import image</button>
             <button class="btn btn-solid" id="vm-create-toggle" type="button">New instance</button>
           </div>
         </div>
@@ -396,6 +397,22 @@
           </div>
         </div>
 
+        <div class="panel hidden" id="image-upload-panel">
+          <div class="panel-head"><h2>Import image</h2><button class="btn btn-sm btn-quiet" id="image-upload-cancel" type="button">Cancel</button></div>
+          <div class="panel-body">
+            <form id="image-upload-form" autocomplete="off">
+              <div class="field-row top">
+                <div class="field field-grow"><label class="field-label" for="image-upload-name">Image name</label><input class="input" id="image-upload-name" required placeholder="ubuntu-custom"></div>
+                <div class="field field-grow"><label class="field-label" for="image-upload-file">Raw ext4 image</label><input class="input file-input" id="image-upload-file" type="file" accept=".ext4,.img" required></div>
+              </div>
+              <p class="field-note" id="image-upload-note">The image is checksum-verified and inspected before it becomes available. HomeCloud always supplies the guest kernel.</p>
+              <p class="field-error hidden" id="image-upload-error" role="alert"></p>
+              <div class="upload-progress hidden" id="image-upload-progress"><progress id="image-upload-meter" max="100" value="0"></progress><span id="image-upload-percent">0%</span></div>
+              <button class="btn btn-solid" id="image-upload-submit" type="submit">Upload and verify</button>
+            </form>
+          </div>
+        </div>
+
         <div class="panel">
           <div class="panel-head">
             <h2>Instances</h2>
@@ -427,6 +444,14 @@
           <div class="panel-foot">
             <span id="vm-foot">0 instances</span>
             <button class="btn btn-link hidden" id="vm-more" type="button">Load more</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Image library</h2><span class="label-micro" id="image-library-count">0 images</span></div>
+          <div class="panel-body flush">
+            <div class="table-scroll"><table class="data"><thead><tr><th>Name</th><th>Source</th><th>Trust</th><th>Status</th><th>Size</th><th>SHA-256</th><th>Created</th></tr></thead><tbody id="image-library-body"></tbody></table></div>
+            <div class="empty hidden" id="image-library-empty">No private images. Import an ext4 image or create a VM snapshot.</div>
           </div>
         </div>
 
@@ -491,6 +516,7 @@
           <div class="panel-head">
             <h2>Terminal</h2>
             <div class="panel-head-actions">
+              <span class="stream-state" id="console-stream-state">Disconnected</span>
               <button class="btn btn-sm" id="console-refresh" type="button">Reconnect</button>
             </div>
           </div>

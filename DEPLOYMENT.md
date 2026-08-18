@@ -41,4 +41,9 @@ HOMECLOUD_COOKIE_SECURE=1.
 [update.sh](update.sh) pulls the tracked branch, updates dependencies, rebuilds
 the base image for new VMs, and restarts HomeCloud safely. Existing VM disks are
 not modified; recreate pre-terminal VMs to remove legacy SSH access and use the
-browser terminal.
+browser terminal. It also enables threaded gunicorn workers and disables nginx
+buffering for persistent terminal streams.
+
+Private raw ext4 image uploads default to 2048 MiB. To choose another limit,
+set `HOMECLOUD_IMAGE_UPLOAD_MAX_MB` in `/etc/homecloud/homecloud.env` and set
+the matching `client_max_body_size` in the HomeCloud nginx configuration.

@@ -93,11 +93,35 @@ const HC = (function () {
    */
   async function api(path, options) {
     const settings = Object.assign({ method: "GET", headers: {} }, options || {});
+    const uploadProgress = settings.onUploadProgress;
+    delete settings.onUploadProgress;
     settings.headers = Object.assign({ Accept: "application/json" }, settings.headers);
 
-    if (settings.body !== undefined && typeof settings.body !== "string") {
+    if (settings.body !== undefined && typeof settings.body !== "string"
+        && !(settings.body instanceof FormData) && !(settings.body instanceof Blob)) {
       settings.headers["Content-Type"] = "application/json";
       settings.body = JSON.stringify(settings.body);
+    }
+
+    if (uploadProgress && (settings.body instanceof FormData || settings.body instanceof Blob)) {
+      return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(settings.method, path);
+        Object.entries(settings.headers).forEach(([name, value]) => xhr.setRequestHeader(name, value));
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) uploadProgress(event.loaded, event.total);
+        };
+        xhr.onerror = () => resolve({ ok: false, status: 0, data: { error: "Could not reach the server." } });
+        xhr.onload = () => {
+          let data = {};
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {}; } catch (error) { data = {}; }
+          if (xhr.status === 401 && !path.startsWith("/auth/api/login")) {
+            window.location.href = "/auth/login?next=" + encodeURIComponent(window.location.pathname);
+          }
+          resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+        };
+        xhr.send(settings.body);
+      });
     }
 
     let response;

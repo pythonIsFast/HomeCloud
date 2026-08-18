@@ -170,3 +170,26 @@ def copy_image(source, target):
             digest.update(block)
     os.chmod(target, 0o640)
     return digest.hexdigest()
+
+
+def validate_uploaded_ext4(path, max_bytes):
+    """Reject non-ext4, oversized, sparse tricks and inconsistent filesystems."""
+    try:
+        stat = os.stat(path, follow_symlinks=False)
+    except OSError as error:
+        raise ImageError("uploaded image is missing") from error
+    if not 16 * 1024 * 1024 <= stat.st_size <= int(max_bytes):
+        raise ImageError("uploaded image size is outside the allowed range")
+    with open(path, "rb") as handle:
+        handle.seek(1024 + 56)
+        if handle.read(2) != b"\x53\xef":
+            raise ImageError("uploaded file is not an ext4 filesystem image")
+    command = ["e2fsck", "-fn", path]
+    if os.geteuid() == 0:
+        if not shutil.which("runuser"):
+            raise ImageError("runuser is required to validate uploads without root privileges")
+        command = ["runuser", "-u", "homecloud", "--", *command]
+    result = _run(command, check=False)
+    if result.returncode != 0:
+        raise ImageError("uploaded ext4 filesystem did not pass a read-only consistency check")
+    return stat.st_size

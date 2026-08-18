@@ -45,6 +45,22 @@ cat > /etc/systemd/system/homecloud-vmm.service.d/worker.conf <<'EOF'
 KillMode=process
 EOF
 
+echo "==> Enabling concurrent terminal streams"
+install -d -m 0755 /etc/systemd/system/homecloud-web.service.d
+cat > /etc/systemd/system/homecloud-web.service.d/streaming.conf <<EOF
+[Service]
+ExecStart=
+ExecStart=${PROJECT_DIR}/.venv/bin/gunicorn --worker-class gthread --workers 2 --threads 8 --bind 127.0.0.1:6002 wsgi:app
+EOF
+cat > /etc/nginx/conf.d/homecloud-streaming.conf <<'EOF'
+# SSE terminal connections must reach the browser immediately and stay open.
+client_max_body_size 2048m;
+proxy_request_buffering off;
+proxy_buffering off;
+proxy_cache off;
+proxy_read_timeout 1h;
+EOF
+
 echo "==> Restarting HomeCloud services"
 systemctl daemon-reload
 systemctl restart homecloud-web.service
@@ -58,4 +74,3 @@ echo
 echo "HomeCloud was updated successfully."
 echo "The rebuilt base image applies to new instances only."
 echo "Recreate older VMs to remove legacy SSH access and gain the web terminal."
-

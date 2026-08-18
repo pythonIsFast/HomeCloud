@@ -16,6 +16,9 @@
   const imageSelect = document.getElementById("vm-image");
   const form = document.getElementById("create-vm-form");
   const createPanel = document.getElementById("vm-create-panel");
+  const uploadPanel = document.getElementById("image-upload-panel");
+  const uploadForm = document.getElementById("image-upload-form");
+  const uploadError = document.getElementById("image-upload-error");
   const errorBox = document.getElementById("create-vm-error");
 
   // Nothing to do on pages without the compute view (there are none today, but
@@ -27,6 +30,7 @@
     flavors: [],
     images: [],
     imageTimer: null,
+    imageUploadLimit: 0,
     nextBeforeId: null,
     quota: null,
     pollTimer: null,
@@ -35,8 +39,8 @@
     detailTab: "overview",
     detailTimer: null,
     consoleOffset: 0,
-    consoleTimer: null,
-    consoleLoading: false,
+    consoleStream: null,
+    consoleReconnectTimer: null,
     pendingTerminalInput: "",
     terminalInputTimer: null,
     terminalInputSending: false,
@@ -102,6 +106,28 @@
     imageSelect.replaceChildren(new Option("HomeCloud base image", ""), ...state.images
       .filter((image) => image.status === "ready")
       .map((image) => new Option(image.name + " · " + Math.round(image.size_bytes / 1048576) + " MiB", image.id)));
+    const libraryBody = document.getElementById("image-library-body");
+    libraryBody.replaceChildren(...state.images.map((image) => {
+      const row = document.createElement("tr");
+      row.appendChild(HC.cell(image.name, "primary"));
+      row.appendChild(HC.cell(image.source === "upload" ? "Uploaded" : "Snapshot"));
+      const trust = image.status === "error" ? "Rejected"
+        : (image.verified ? "Integrity checked" : "Verifying");
+      row.appendChild(HC.cell(HC.tag(trust)));
+      const status = HC.status(image.status);
+      if (image.last_error) status.title = image.last_error;
+      row.appendChild(HC.cell(status));
+      row.appendChild(HC.cell(image.size_bytes ? Math.round(image.size_bytes / 1048576) + " MiB" : "–", "mono"));
+      const digest = image.sha256 ? image.sha256.slice(0, 12) + "…" : "–";
+      const digestCell = HC.cell(digest, "mono");
+      if (image.sha256) digestCell.title = image.sha256;
+      row.appendChild(digestCell);
+      row.appendChild(HC.cell(HC.formatAge(image.created_at), "mono"));
+      return row;
+    }));
+    document.getElementById("image-library-empty").classList.toggle("hidden", state.images.length > 0);
+    document.getElementById("image-library-count").textContent = state.images.length
+      + (state.images.length === 1 ? " image" : " images");
   }
 
   function showFlavorSpec() {
@@ -197,6 +223,12 @@
     const result = await HC.api("/compute/api/images");
     if (!result.ok) return;
     state.images = result.data.images || [];
+    state.imageUploadLimit = result.data.upload_limit_bytes || 0;
+    if (state.imageUploadLimit) {
+      document.getElementById("image-upload-note").textContent =
+        "Maximum " + Math.round(state.imageUploadLimit / 1048576) + " MiB. "
+        + "The ext4 filesystem is checksum-verified and inspected before use; HomeCloud supplies the kernel.";
+    }
     renderImages();
     if (state.detailInstance) renderSnapshots(state.detailInstance);
     if (state.imageTimer) window.clearTimeout(state.imageTimer);
@@ -278,12 +310,69 @@
   });
 
   document.getElementById("vm-create-toggle").addEventListener("click", () => {
+    uploadPanel.classList.add("hidden");
     createPanel.classList.remove("hidden");
     document.getElementById("vm-name").focus();
   });
   document.getElementById("vm-create-cancel").addEventListener("click", () => {
     createPanel.classList.add("hidden");
     errorBox.classList.add("hidden");
+  });
+
+  document.getElementById("image-upload-toggle").addEventListener("click", () => {
+    createPanel.classList.add("hidden");
+    uploadPanel.classList.remove("hidden");
+    document.getElementById("image-upload-name").focus();
+  });
+  document.getElementById("image-upload-cancel").addEventListener("click", () => {
+    uploadPanel.classList.add("hidden");
+    uploadError.classList.add("hidden");
+  });
+
+  uploadForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    uploadError.classList.add("hidden");
+    const file = document.getElementById("image-upload-file").files[0];
+    if (!file) return;
+    if (state.imageUploadLimit && file.size > state.imageUploadLimit) {
+      uploadError.textContent = "The selected image exceeds the upload limit.";
+      uploadError.classList.remove("hidden");
+      return;
+    }
+    const imageName = document.getElementById("image-upload-name").value;
+    const button = document.getElementById("image-upload-submit");
+    const cancel = document.getElementById("image-upload-cancel");
+    const progress = document.getElementById("image-upload-progress");
+    const meter = document.getElementById("image-upload-meter");
+    const percent = document.getElementById("image-upload-percent");
+    progress.classList.remove("hidden");
+    meter.value = 0;
+    percent.textContent = "0%";
+    HC.setBusy(button, true);
+    cancel.disabled = true;
+    const uploadPath = "/compute/api/images/uploads?name=" + encodeURIComponent(imageName)
+      + "&filename=" + encodeURIComponent(file.name);
+    const result = await HC.api(uploadPath, {
+      method: "POST", body: file, headers: { "Content-Type": "application/octet-stream" },
+      onUploadProgress: (loaded, total) => {
+        const value = Math.min(100, Math.round(loaded / total * 100));
+        meter.value = value;
+        percent.textContent = value + "%";
+      },
+    });
+    HC.setBusy(button, false);
+    cancel.disabled = false;
+    if (!result.ok) {
+      uploadError.textContent = result.data.error || "Upload failed (HTTP " + result.status + ").";
+      uploadError.classList.remove("hidden");
+      progress.classList.add("hidden");
+      return;
+    }
+    uploadForm.reset();
+    uploadPanel.classList.add("hidden");
+    progress.classList.add("hidden");
+    HC.toast("Image uploaded", "Verification is running in the background.", "success");
+    await loadImages();
   });
 
   /* --- actions ------------------------------------------------------------ */
@@ -330,20 +419,52 @@
     return gib < 1 ? gib.toFixed(2) : gib.toFixed(1);
   }
 
-  function clearConsoleTimer() {
-    if (state.consoleTimer) window.clearTimeout(state.consoleTimer);
-    state.consoleTimer = null;
+  function disconnectConsoleStream() {
+    if (state.consoleReconnectTimer) window.clearTimeout(state.consoleReconnectTimer);
+    state.consoleReconnectTimer = null;
+    if (state.consoleStream) state.consoleStream.close();
+    state.consoleStream = null;
   }
 
-  function scheduleConsolePoll(delay) {
-    clearConsoleTimer();
-    if (!state.detailId) return;
-    state.consoleTimer = window.setTimeout(async () => {
-      const more = await refreshConsole();
-      // A serial console is interactive: 350 ms made echoed keystrokes feel
-      // remote. Keep the local poll light but fast, and drain a backlog in the
-      // next frame instead of making the user wait for it.
-      scheduleConsolePoll(more ? 0 : 80);
+  function setStreamState(label, connected) {
+    const element = document.getElementById("console-stream-state");
+    element.textContent = label;
+    element.classList.toggle("is-connected", Boolean(connected));
+  }
+
+  function applyConsoleChunk(chunk) {
+    if (chunk.reset || state.consoleOffset === 0) {
+      terminal.clear();
+      consoleDecoder = new TextDecoder("utf-8");
+    }
+    if (chunk.data) {
+      const binary = window.atob(chunk.data);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      terminal.write(consoleDecoder.decode(bytes, { stream: true }));
+    }
+    state.consoleOffset = chunk.offset || state.consoleOffset;
+  }
+
+  function connectConsoleStream(delay) {
+    disconnectConsoleStream();
+    if (!state.detailId || state.detailTab !== "terminal") return;
+    setStreamState(delay ? "Reconnecting…" : "Connecting…", false);
+    state.consoleReconnectTimer = window.setTimeout(() => {
+      state.consoleReconnectTimer = null;
+      const source = new EventSource(
+        "/compute/api/instances/" + state.detailId + "/console/stream?after=" + state.consoleOffset
+      );
+      state.consoleStream = source;
+      source.onopen = () => setStreamState("Live", true);
+      source.onmessage = (event) => {
+        try { applyConsoleChunk(JSON.parse(event.data)); }
+        catch (error) { setStreamState("Stream error", false); }
+      };
+      source.onerror = () => {
+        source.close();
+        if (state.consoleStream === source) state.consoleStream = null;
+        if (state.detailId && state.detailTab === "terminal") connectConsoleStream(1000);
+      };
     }, delay);
   }
 
@@ -458,8 +579,8 @@
       else button.removeAttribute("aria-current");
     });
     if (updateHash && state.detailId) window.location.hash = "vm/" + state.detailId + "/" + state.detailTab;
-    if (state.detailTab === "terminal" && state.detailInstance && state.detailInstance.status === "running") scheduleConsolePoll(0);
-    else clearConsoleTimer();
+    if (state.detailTab === "terminal" && state.detailInstance && state.detailInstance.status === "running") connectConsoleStream(0);
+    else { disconnectConsoleStream(); setStreamState("Disconnected", false); }
   }
 
   document.querySelectorAll("[data-vm-tab]").forEach((button) => {
@@ -493,46 +614,24 @@
     state.detailInstance = instance;
     renderDetail(instance);
     scheduleDetailPoll(instance);
-    if (instance.status === "running" && state.detailTab === "terminal") {
-      if (state.consoleOffset === 0) terminal.clear();
-      scheduleConsolePoll(0);
+    if (instance.status === "running") {
+      if (state.detailTab === "terminal" && !state.consoleStream && !state.consoleReconnectTimer) {
+        if (state.consoleOffset === 0) terminal.clear();
+        connectConsoleStream(0);
+      }
     } else {
-      clearConsoleTimer();
+      disconnectConsoleStream();
+      setStreamState("Offline", false);
       terminal.clear();
       terminal.write("Terminal is available while the instance is running.");
     }
   }
 
-  async function refreshConsole() {
-    if (!state.detailId || state.consoleLoading) return false;
-    state.consoleLoading = true;
-    const result = await HC.api(
-      "/compute/api/instances/" + state.detailId + "/console?after=" + state.consoleOffset
-    );
-    state.consoleLoading = false;
-    if (!result.ok) {
-      terminal.clear();
-      terminal.write(result.data.error || "HTTP " + result.status);
-      return false;
-    }
-    const wasAtBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 24;
-    if (result.data.reset || state.consoleOffset === 0) {
-      terminal.clear();
-      consoleDecoder = new TextDecoder("utf-8");
-    }
-    if (result.data.data) {
-      const binary = window.atob(result.data.data);
-      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-      terminal.write(consoleDecoder.decode(bytes, { stream: true }));
-    }
-    state.consoleOffset = result.data.offset || state.consoleOffset;
-    if (wasAtBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
-    return Boolean(result.data.more);
-  }
-
   document.getElementById("console-refresh").addEventListener("click", () => {
     state.consoleOffset = 0;
-    refreshConsole();
+    consoleDecoder = new TextDecoder("utf-8");
+    terminal.clear();
+    connectConsoleStream(0);
     consoleOut.focus();
   });
 
@@ -588,10 +687,6 @@
       if (!result.ok) {
         HC.toast("Terminal " + (label || "input") + " failed",
           result.data.error || "HTTP " + result.status, "error");
-      } else {
-        // The guest normally echoes input. Ask for that output as soon as the
-        // worker has accepted the keystroke instead of waiting for the timer.
-        window.setTimeout(() => refreshConsole(), 10);
       }
     } finally {
       state.terminalInputSending = false;
@@ -604,13 +699,11 @@
     if (!match) {
       state.detailId = null;
       state.detailInstance = null;
-      if (state.imageTimer) window.clearTimeout(state.imageTimer);
-      state.imageTimer = null;
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";
       if (state.terminalInputTimer) window.clearTimeout(state.terminalInputTimer);
       state.terminalInputTimer = null;
-      clearConsoleTimer();
+      disconnectConsoleStream();
       if (state.detailTimer) window.clearTimeout(state.detailTimer);
       state.detailTimer = null;
       return;

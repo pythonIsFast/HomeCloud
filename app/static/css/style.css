@@ -1130,6 +1130,12 @@ table.data td.right { text-align: right; }
 .terminal-measure { position: absolute; visibility: hidden; white-space: pre; }
 .terminal-cursor { background: #e8e1d5; color: #171513; animation: terminal-blink 1s steps(1) infinite; }
 @keyframes terminal-blink { 50% { opacity: 0; } }
+.stream-state { color: var(--warn); font-size: var(--t-xs); }
+.stream-state::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; }
+.stream-state.is-connected { color: var(--ok); }
+.file-input { padding: 3px 6px; }
+.upload-progress { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: var(--fg-muted); font-family: var(--mono); font-size: var(--t-xs); }
+.upload-progress progress { width: min(420px, 100%); height: 7px; accent-color: var(--accent); }
 
 /* Instance workspace: a stable header with task-oriented tabs keeps controls
    close to their context instead of turning the overview into a control dump. */

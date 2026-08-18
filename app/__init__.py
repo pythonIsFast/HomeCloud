@@ -7,7 +7,7 @@ Usage:
 
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 
 from . import audit
 from . import config as app_config
@@ -30,9 +30,16 @@ def create_app(test_config=None):
     else:
         app.config.from_mapping(test_config)
 
+    os.makedirs(app.config.get("UPLOAD_DIR", os.path.join(app.instance_path, "uploads")),
+                mode=0o750, exist_ok=True)
+
     # Database: teardown handler + "flask --app app init-db" CLI command.
     db.register(app)
     security.register(app)
+
+    @app.errorhandler(413)
+    def upload_too_large(_error):
+        return jsonify({"error": "upload exceeds the configured image size limit"}), 413
     # "flask --app app prune-audit"
     audit.register(app)
     # "flask --app app compute-build-image"

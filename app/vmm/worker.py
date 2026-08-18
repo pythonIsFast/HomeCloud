@@ -281,9 +281,39 @@ class Worker:
                               f"{image['id']}.ext4")
         checksum = images.copy_image(source_path, target)
         resources.merge_config(image["id"], {"path": target, "sha256": checksum,
-                                               "size_bytes": os.path.getsize(target)})
+                                               "size_bytes": os.path.getsize(target),
+                                               "verified": True})
         resources.set_status(image["id"], "ready")
         audit.log_action(job["user_id"], "compute.snapshot", image["id"], {"source": source["id"]})
+
+    def do_import_image(self, job):
+        image = resources.get_any(job["resource_id"])
+        if image is None or image["service_type"] != "compute_image":
+            raise RuntimeError("uploaded image resource is unavailable")
+        resources.set_status(image["id"], "creating")
+        config = self.config_of(image)
+        staged = config.get("staged_path")
+        limit = self.app.config["MAX_CONTENT_LENGTH"]
+        target = os.path.join(self.app.config["IMAGE_DIR"], "user", str(image["user_id"]),
+                              f"{image['id']}.ext4")
+        try:
+            images.validate_uploaded_ext4(staged, limit)
+            checksum = images.copy_image(staged, target)
+            if checksum != config.get("sha256"):
+                raise RuntimeError("uploaded image checksum changed during validation")
+        except Exception:
+            for path in (staged, target):
+                try:
+                    os.remove(path)
+                except (OSError, TypeError):
+                    pass
+            raise
+        os.remove(staged)
+        resources.merge_config(image["id"], {"path": target, "staged_path": None,
+                                               "verified": True, "size_bytes": os.path.getsize(target)})
+        resources.set_status(image["id"], "ready")
+        audit.log_action(job["user_id"], "compute.image_import", image["id"],
+                         {"sha256": checksum})
 
     def _boot(self, row, config, plan, directory, rootfs):
         vm_config = firecracker.build_config(

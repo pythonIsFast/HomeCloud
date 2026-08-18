@@ -192,11 +192,12 @@ vmm/*            ->  db, audit, jobs, core.resources   (never auth, never core.r
 ```
 
 `db.py`, `jobs.py`, `limits.py` and `audit.py` import nothing from `auth`,
-`core`, `services` or `vmm`. The web application never imports `vmm` except for
-two read-only helpers (`firecracker.tail_console`, and `images` inside the CLI
-command), plus the scoped `console.send_input` Unix-socket client. That client
-only sends keystrokes to a worker-owned bridge; it cannot access KVM, processes,
-tap devices or VM files.
+`core`, `services` or `vmm`. The web application imports only the bounded serial
+read helper, `images` inside the setup CLI, and the scoped
+`console.send_input` Unix-socket client. Uploaded images are written only to the
+unprivileged `instance/uploads/` staging directory; the web process never opens
+VM disks, KVM, tap devices or processes. The worker verifies and promotes a
+staged image before it can be selected for a VM.
 
 ---
 
@@ -246,7 +247,10 @@ tap devices or VM files.
 | `POST`   | `/compute/api/instances/<id>/actions/<action>` | yes | start/stop/restart |
 | `DELETE` | `/compute/api/instances/<id>` | yes | delete instance                 |
 | `GET`    | `/compute/api/instances/<id>/console` | yes | serial terminal output  |
+| `GET`    | `/compute/api/instances/<id>/console/stream` | yes | live SSE output |
 | `POST`   | `/compute/api/instances/<id>/console/input` | yes | send terminal keys |
+| `GET`    | `/compute/api/images` | yes | private images + upload limit |
+| `POST`   | `/compute/api/images/uploads` | yes | stage an ext4 image import |
 | `GET`    | `/api/admin/limits`      | admin | defaults + accounts with usage     |
 | `PUT`    | `/api/admin/limits`      | admin | change installation defaults       |
 | `PUT`    | `/api/admin/limits/<user_id>` | admin | set a user's override         |
@@ -440,6 +444,9 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
 - `terminal.js` is the in-house ANSI terminal renderer. Keep it dependency-free
   and bounded: it supports the serial-shell control sequences HomeCloud emits,
   retains at most 800 lines and must never use `innerHTML` for terminal output.
+  Output arrives over authenticated SSE with automatic reconnect; never
+  reintroduce interval polling. Gunicorn uses threaded workers and nginx must
+  keep proxy buffering disabled for the stream.
 - **A service brings its own script** (`compute.js`, `admin.js`), loaded after
   `dashboard.js`, registering itself as
   `window.HCViews.<name> = { load: () => ... }`. The shell calls every
@@ -473,9 +480,11 @@ browser ──HTTP──> Flask (unprivileged)  ──INSERT──> jobs table
                                     app/vmm worker (root) ──> tap, NAT, firecracker
 ```
 
-The web process **never** touches KVM, tap devices, images or processes. It
+The web process **never** touches KVM, tap devices, VM disks or processes. It
 validates, checks quota, writes a `resources` row plus a `jobs` row, and answers
-`202`. The worker does the slow, privileged part. Consequences to respect:
+`202`. Its only disk-image write is bounded upload staging under
+`instance/uploads/`, which cannot be booted directly. The worker does the slow,
+privileged validation and promotion. Consequences to respect:
 
 - A gunicorn worker is recycled and its children would be orphaned, so spawning
   a VM from a request handler is not an option — not even "just for testing".
@@ -544,8 +553,24 @@ OpenSSH units and configures `serial-getty@ttyS0` to log in as root. The UI
 opens that serial terminal only after HomeCloud has authenticated and authorized
 the resource owner. The web process sends at most 4096 bytes through a
 worker-owned Unix socket; the privileged worker alone holds the FIFO connected
-to Firecracker stdin. Rebuild the base image and recreate existing VMs to apply
-this access model to disks that were made before this change.
+to Firecracker stdin. Output uses persistent authenticated SSE instead of
+polling. Rebuild the base image and recreate existing VMs to apply this access
+model to disks that were made before this change.
+
+### Private image imports
+
+Users may hold at most ten private `.ext4`/`.img` images. Flask enforces
+`HOMECLOUD_IMAGE_UPLOAD_MAX_MB` (2048 MB by default) before staging. The web
+process chooses the staging filename, streams a SHA-256 digest, and never uses
+the client filename as a path. Uploads use a raw `application/octet-stream`
+body so Werkzeug does not spool and duplicate a multi-gigabyte multipart file.
+The worker checks the ext4 superblock, runs a
+read-only `e2fsck` as the unprivileged `homecloud` account, copies the image,
+recomputes the digest, and only then marks it `ready`. Uploaded guest code stays
+untrusted even after the transport and filesystem checks pass.
+nginx also defaults to `client_max_body_size 2048m`; deployments that change
+the Flask environment limit must change the nginx limit to match. nginx request
+buffering stays off so it does not create another full-size temporary copy.
 
 ### Quota
 
