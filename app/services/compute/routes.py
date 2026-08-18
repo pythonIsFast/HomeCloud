@@ -60,10 +60,26 @@ def create_instance():
             user,
             data.get("name"),
             data.get("flavor"),
+            data.get("image_id"),
         )
         return jsonify({"instance": service.public_view(row)}), 201
 
     return _handle(run)
+
+
+@bp.get("/api/images")
+@guards.login_required
+def list_images():
+    return jsonify({"images": service.list_images(guards.current_user())})
+
+
+@bp.post("/api/images/snapshots")
+@guards.login_required
+def create_snapshot():
+    data = _payload()
+    return _handle(lambda: jsonify({"image": service.image_view(service.snapshot(
+        guards.current_user(), data.get("instance_id"), data.get("name")
+    ))}), 202)
 
 
 @bp.get("/api/instances/<int:resource_id>")

@@ -20,6 +20,7 @@ tools rather than Python packages.
 """
 
 import os
+import hashlib
 import shutil
 import subprocess
 import tempfile
@@ -155,3 +156,17 @@ def disk_usage_bytes(path):
         return os.stat(path).st_blocks * 512
     except OSError:
         return 0
+
+
+def copy_image(source, target):
+    """Create an immutable sparse image copy and return its SHA-256 digest."""
+    if not os.path.isfile(source):
+        raise ImageError("source disk image is missing")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    _run(["cp", "--reflink=auto", "--sparse=always", source, target])
+    digest = hashlib.sha256()
+    with open(target, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    os.chmod(target, 0o640)
+    return digest.hexdigest()

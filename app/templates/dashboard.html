@@ -409,8 +409,13 @@
                   <select class="select" id="vm-flavor" aria-label="Instance size"></select>
                   <p class="field-note" id="vm-flavor-note">&nbsp;</p>
                 </div>
+                <div class="field">
+                  <label class="field-label" for="vm-image">Image</label>
+                  <select class="select" id="vm-image"><option value="">HomeCloud base image</option></select>
+                  <p class="field-note">Private snapshots appear here.</p>
+                </div>
               </div>
-
+    
               <p class="field-error hidden" id="create-vm-error" role="alert"></p>
 
               <button class="btn btn-solid" type="submit" id="create-vm-submit">

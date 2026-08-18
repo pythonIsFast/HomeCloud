@@ -13,6 +13,7 @@
   const moreButton = document.getElementById("vm-more");
   const flavorSelect = document.getElementById("vm-flavor");
   const flavorNote = document.getElementById("vm-flavor-note");
+  const imageSelect = document.getElementById("vm-image");
   const form = document.getElementById("create-vm-form");
   const errorBox = document.getElementById("create-vm-error");
 
@@ -23,6 +24,7 @@
   const state = {
     instances: [],
     flavors: [],
+    images: [],
     nextBeforeId: null,
     quota: null,
     pollTimer: null,
@@ -91,6 +93,12 @@
     );
     if (state.defaultFlavor) flavorSelect.value = state.defaultFlavor;
     showFlavorSpec();
+  }
+
+  function renderImages() {
+    imageSelect.replaceChildren(new Option("HomeCloud base image", ""), ...state.images
+      .filter((image) => image.status === "ready")
+      .map((image) => new Option(image.name + " · " + Math.round(image.size_bytes / 1048576) + " MiB", image.id)));
   }
 
   function showFlavorSpec() {
@@ -178,6 +186,11 @@
     renderQuota();
   }
 
+  async function loadImages() {
+    const result = await HC.api("/compute/api/images");
+    if (result.ok) { state.images = result.data.images || []; renderImages(); }
+  }
+
   async function load(append) {
     if (!append) HC.renderLoadingRows(body, 2, 7);
 
@@ -233,6 +246,7 @@
       body: {
         name: document.getElementById("vm-name").value,
         flavor: flavorSelect.value,
+        image_id: imageSelect.value || null,
       },
     });
 
@@ -360,8 +374,25 @@
       detailActions.appendChild(actionButton("Restart", instance, "restart"));
     } else {
       detailActions.appendChild(actionButton("Start", instance, "start"));
+      const snapshot = document.createElement("button");
+      snapshot.className = "btn btn-sm";
+      snapshot.type = "button";
+      snapshot.textContent = "Snapshot";
+      snapshot.addEventListener("click", () => createSnapshot(instance));
+      detailActions.appendChild(snapshot);
     }
     detailActions.appendChild(actionButton("Delete", instance, "delete", true));
+  }
+
+  async function createSnapshot(instance) {
+    const name = window.prompt("Snapshot name", instance.name + "-snapshot");
+    if (!name) return;
+    const result = await HC.api("/compute/api/images/snapshots", {
+      method: "POST", body: { instance_id: instance.id, name },
+    });
+    if (!result.ok) { HC.toast("Snapshot failed", result.data.error || "HTTP " + result.status, "error"); return; }
+    HC.toast("Snapshot queued", name, "success");
+    loadImages();
   }
 
   function scheduleDetailPoll(instance) {
@@ -522,6 +553,6 @@
 
   window.HCViews = window.HCViews || {};
   window.HCViews.compute = {
-    load: () => Promise.all([load(false), loadFlavors()]).then(routeDetail),
+    load: () => Promise.all([load(false), loadFlavors(), loadImages()]).then(routeDetail),
   };
 })();

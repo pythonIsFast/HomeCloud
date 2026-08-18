@@ -13,6 +13,7 @@ from ...core import resources
 from . import flavors
 
 SERVICE_TYPE = "compute"
+IMAGE_TYPE = "compute_image"
 
 # Instance names end up in a tap device name and a directory, so keep them tame.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
@@ -106,7 +107,7 @@ def validate_firewall(rules):
 # --- create -----------------------------------------------------------------
 
 
-def create_instance(user, name, flavor_name):
+def create_instance(user, name, flavor_name, image_id=None):
     """Validate, reserve quota, write the registry row, queue the create job."""
     name = validate_name(name)
     flavor = flavors.get(flavor_name or flavors.DEFAULT_FLAVOR)
@@ -122,6 +123,14 @@ def create_instance(user, name, flavor_name):
     if denial:
         raise ComputeError(denial, status=409)
 
+    try:
+        image_id = int(image_id) if image_id not in (None, "") else None
+    except (TypeError, ValueError) as error:
+        raise ComputeError("image id must be numeric") from error
+    if image_id:
+        image = resources.get(user["id"], image_id)
+        if image is None or image["service_type"] != IMAGE_TYPE or image["status"] != "ready":
+            raise ComputeError("selected image is not available", status=409)
     resource_id = resources.create(
         user["id"],
         SERVICE_TYPE,
@@ -134,6 +143,7 @@ def create_instance(user, name, flavor_name):
             "pid": None,
             "ip": None,
             "firewall": [],
+            "image_id": image_id,
         },
         status="pending",
     )
@@ -143,6 +153,34 @@ def create_instance(user, name, flavor_name):
                      {"name": name, "flavor": flavor["name"]})
 
     return resources.get(user["id"], resource_id)
+
+
+def image_view(row):
+    data = resources.to_dict(row)
+    config = data["config"]
+    return {"id": data["id"], "name": data["name"], "status": data["status"],
+            "created_at": data["created_at"], "size_bytes": config.get("size_bytes", 0),
+            "sha256": config.get("sha256"), "source_instance_id": config.get("source_instance_id")}
+
+
+def list_images(user):
+    return [image_view(row) for row in resources.list_for_user(user["id"], IMAGE_TYPE)]
+
+
+def snapshot(user, source_id, name):
+    source = resources.get(user["id"], source_id)
+    if source is None or source["service_type"] != SERVICE_TYPE:
+        raise ComputeError("instance not found", status=404)
+    if source["status"] != "stopped":
+        raise ComputeError("stop the instance before creating a consistent snapshot", status=409)
+    name = validate_name(name)
+    if resources.get_by_name(user["id"], IMAGE_TYPE, name):
+        raise ComputeError(f"you already have an image named {name!r}", status=409)
+    image_id = resources.create(user["id"], IMAGE_TYPE, name,
+        {"source_instance_id": source_id}, status="pending")
+    jobs.enqueue("snapshot", resource_id=image_id, user_id=user["id"], payload={"source_id": source_id})
+    audit.log_action(user["id"], "compute.snapshot_requested", image_id, {"source": source_id})
+    return resources.get(user["id"], image_id)
 
 
 def update_firewall(user, resource_id, rules):

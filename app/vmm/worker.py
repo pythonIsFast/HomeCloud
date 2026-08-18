@@ -167,9 +167,14 @@ class Worker:
 
         self.log(f"  building disk ({config.get('disk_gb', 1)} GB)")
         rootfs = os.path.join(directory, "rootfs.ext4")
-        images.create_vm_disk(
-            self.app.config["VM_BASE_ROOTFS"], rootfs, config.get("disk_gb", 1)
-        )
+        base_image = self.app.config["VM_BASE_ROOTFS"]
+        if config.get("image_id"):
+            image = resources.get_any(config["image_id"])
+            image_config = self.config_of(image) if image else {}
+            if image is None or image["user_id"] != row["user_id"] or image["status"] != "ready":
+                raise RuntimeError("selected image is unavailable")
+            base_image = image_config.get("path")
+        images.create_vm_disk(base_image, rootfs, config.get("disk_gb", 1))
 
         net.create_tap(plan)
         net.apply_firewall(row["id"], plan, config.get("firewall", []))
@@ -263,6 +268,22 @@ class Worker:
             net.apply_firewall(row["id"], plan, config.get("firewall", []))
         audit.log_action(job["user_id"], "compute.firewall", row["id"],
                          {"rules": config.get("firewall", [])})
+
+    def do_snapshot(self, job):
+        image = resources.get_any(job["resource_id"])
+        payload = jobs.payload_of(job)
+        source = resources.get_any(payload.get("source_id"))
+        if image is None or source is None or image["user_id"] != source["user_id"]:
+            raise RuntimeError("snapshot source is unavailable")
+        source_config = self.config_of(source)
+        source_path = source_config.get("rootfs")
+        target = os.path.join(self.app.config["IMAGE_DIR"], "user", str(image["user_id"]),
+                              f"{image['id']}.ext4")
+        checksum = images.copy_image(source_path, target)
+        resources.merge_config(image["id"], {"path": target, "sha256": checksum,
+                                               "size_bytes": os.path.getsize(target)})
+        resources.set_status(image["id"], "ready")
+        audit.log_action(job["user_id"], "compute.snapshot", image["id"], {"source": source["id"]})
 
     def _boot(self, row, config, plan, directory, rootfs):
         vm_config = firecracker.build_config(
