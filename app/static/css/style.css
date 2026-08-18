@@ -1022,12 +1022,18 @@ table.data td.right { text-align: right; }
    =========================================================================== */
 
 .signin {
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: grid;
   grid-template-rows: 1fr auto;
   justify-items: center;
   padding: 0 20px;
   background: var(--canvas);
+  overflow-y: auto;
 }
 
 .signin-box { width: min(352px, 100%); align-self: center; padding: 48px 0; }
