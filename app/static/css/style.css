@@ -1,0 +1,169 @@
+/* HomeCloud - plain CSS, no framework, no build step. */
+
+:root {
+  --bg: #0f1319;
+  --bg-elevated: #171d26;
+  --border: #2a3441;
+  --text: #e6ebf2;
+  --text-muted: #8d9bad;
+  --accent: #4c8dff;
+  --ok: #3fb950;
+  --warn: #d29922;
+  --error: #f85149;
+  --radius: 8px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* --- top bar --------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.brand-name { font-size: 17px; font-weight: 600; letter-spacing: 0.2px; }
+
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+
+.user-badge { color: var(--text-muted); font-size: 13px; }
+
+/* --- layout ---------------------------------------------------------------- */
+
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.card-actions { display: flex; align-items: center; gap: 8px; }
+
+.auth-card { max-width: 420px; margin: 48px auto; }
+
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 20px 0 4px; }
+
+.muted { color: var(--text-muted); font-size: 13px; }
+.inline { color: var(--text-muted); font-size: 13px; }
+.hidden { display: none; }
+
+hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0 0; }
+
+/* --- forms ----------------------------------------------------------------- */
+
+label { display: block; margin: 14px 0 4px; font-size: 13px; color: var(--text-muted); }
+label.inline { display: inline; margin: 0; }
+
+input, select {
+  width: 100%;
+  padding: 9px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+select { width: auto; }
+
+input:focus, select:focus, button:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  margin-top: 16px;
+  padding: 9px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--accent); }
+
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.ghost { margin-top: 0; background: transparent; }
+
+/* --- table ----------------------------------------------------------------- */
+
+.table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+
+.table th, .table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.table th { color: var(--text-muted); font-size: 12px; text-transform: uppercase; }
+
+.table tbody tr:hover { background: rgba(76, 141, 255, 0.06); }
+
+.status { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
+.status-running { color: var(--ok); border-color: var(--ok); }
+.status-pending, .status-creating { color: var(--warn); border-color: var(--warn); }
+.status-error { color: var(--error); border-color: var(--error); }
+
+.empty { margin-top: 20px; color: var(--text-muted); font-size: 14px; }
+
+/* --- messages -------------------------------------------------------------- */
+
+.message { margin-top: 16px; font-size: 13px; min-height: 18px; }
+.message.error { color: var(--error); }
+.message.ok { color: var(--ok); }

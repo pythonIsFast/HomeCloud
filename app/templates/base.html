@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">HC</span>
+      <span class="brand-name">{{ app_name }}</span>
+    </div>
+    {% block topbar_right %}{% endblock %}
+  </header>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>{{ app_name }} &mdash; self-hosted cloud dashboard</span>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

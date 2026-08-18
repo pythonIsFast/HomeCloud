@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; {{ app_name }}{% endblock %}
+
+{% block topbar_right %}
+<div class="topbar-right">
+  <span class="user-badge" title="Role: {{ user['role'] }}">{{ user['email'] }}</span>
+  <button id="logout-button" class="ghost">Sign out</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="card">
+  <div class="card-head">
+    <h1>Resources</h1>
+    <div class="card-actions">
+      <label class="inline" for="service-filter">Service</label>
+      <select id="service-filter">
+        <option value="">All services</option>
+      </select>
+      <button id="refresh-button" class="ghost">Refresh</button>
+    </div>
+  </div>
+
+  <p class="muted">
+    Every service stores its objects in one shared registry. New services will
+    show up here automatically as soon as they create resources.
+  </p>
+
+  <table class="table" id="resources-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Service</th>
+        <th>Name</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody id="resources-body"></tbody>
+  </table>
+
+  <p id="resources-empty" class="empty hidden">
+    No resources yet. Once a service is installed, its objects appear in this table.
+  </p>
+  <p id="resources-error" class="message error hidden"></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Flask instance folder (contains the SQLite DB and local secrets).
+# Keep the directory in git, ignore everything inside it.
+instance/*
+!instance/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment / local config
+.env
+.env.*
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Sign in &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<section class="card auth-card">
+  <h1>Sign in to {{ app_name }}</h1>
+  <p class="muted">Use your local account. Sessions are signed JSON Web Tokens.</p>
+
+  <form id="login-form" autocomplete="on">
+    <label for="login-email">Email</label>
+    <input id="login-email" name="email" type="email" required autocomplete="username">
+
+    <label for="login-password">Password</label>
+    <input id="login-password" name="password" type="password" required
+           autocomplete="current-password">
+
+    <button type="submit" class="primary">Sign in</button>
+  </form>
+
+  {% if allow_registration %}
+  <hr>
+  <h2>Create an account</h2>
+  <p class="muted">The first account created becomes the administrator.</p>
+
+  <form id="register-form" autocomplete="on">
+    <label for="register-email">Email</label>
+    <input id="register-email" name="email" type="email" required autocomplete="username">
+
+    <label for="register-password">Password</label>
+    <input id="register-password" name="password" type="password" required minlength="8"
+           autocomplete="new-password">
+
+    <button type="submit">Register</button>
+  </form>
+  {% endif %}
+
+  <p id="auth-message" class="message" role="status" aria-live="polite"></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+{% endblock %}
