@@ -256,6 +256,10 @@
     emitData(data) { this.dataListeners.forEach((listener) => listener(data)); }
 
     handleKey(event) {
+      // Do not translate the browser's paste shortcut into Ctrl-V (0x16).
+      // Preventing that keydown suppresses the following paste event on common
+      // browsers, leaving a focusable serial terminal unable to receive text.
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") return;
       if (event.ctrlKey && event.key.length === 1) {
         const code = event.key.toUpperCase().charCodeAt(0);
         if (code >= 64 && code <= 95) { event.preventDefault(); this.emitData(String.fromCharCode(code - 64)); }

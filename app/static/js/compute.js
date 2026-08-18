@@ -812,11 +812,27 @@
     );
   }
 
+  function takeTerminalChunk(text) {
+    // The server deliberately accepts at most 4096 UTF-8 bytes per request.
+    // Split by code point rather than JavaScript code unit so emoji and other
+    // multi-byte input cannot be cut into invalid UTF-8 while pasting.
+    const encoder = new TextEncoder();
+    let bytes = 0;
+    let end = 0;
+    for (const character of text) {
+      const size = encoder.encode(character).length;
+      if (bytes + size > 4096) break;
+      bytes += size;
+      end += character.length;
+    }
+    return [text.slice(0, end), text.slice(end)];
+  }
+
   async function flushTerminalInput(label) {
     state.terminalInputTimer = null;
     if (!state.detailId || !state.pendingTerminalInput) return;
-    const input = state.pendingTerminalInput;
-    state.pendingTerminalInput = "";
+    const [input, remainder] = takeTerminalChunk(state.pendingTerminalInput);
+    state.pendingTerminalInput = remainder;
     state.terminalInputSending = true;
     try {
       const result = await HC.api(
