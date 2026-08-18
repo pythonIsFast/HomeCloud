@@ -602,7 +602,9 @@ on Postgres, and can later be sharpened with `FOR UPDATE SKIP LOCKED`.
 5. Extend `.gitignore` if new generated files appeared.
 6. `git add .`
 7. `git commit -m "short message"`
+8. `git push`
 
 Commit messages: short, imperative, English (e.g. `add compute service
 blueprint`). Never commit `instance/` contents — the DB and `secret_key` are
-ignored on purpose. Do not push unless the user asks.
+ignored on purpose. Push only after the commit succeeds and the remote is the
+intended repository.
