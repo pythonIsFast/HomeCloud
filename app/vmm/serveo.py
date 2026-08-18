@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import time
 
@@ -17,11 +18,25 @@ class ServeoError(Exception):
 
 
 URL_RE = re.compile(r"https://[a-z0-9.-]+", re.IGNORECASE)
+SYSTEM_SSH_PROXY_CONFIG = "/etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf"
 
 
 def require_tools():
     if shutil.which("ssh") is None:
         raise ServeoError("OpenSSH client is missing on the HomeCloud host")
+    try:
+        metadata = os.stat(SYSTEM_SSH_PROXY_CONFIG)
+    except FileNotFoundError:
+        return
+    except OSError:
+        return
+    mode = stat.S_IMODE(metadata.st_mode)
+    if metadata.st_uid != 0 or mode & 0o022:
+        raise ServeoError(
+            "Host SSH configuration has unsafe ownership or permissions. Run: "
+            "sudo chown root:root /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf "
+            "&& sudo chmod 644 /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf"
+        )
 
 
 def log_path(vm_dir):

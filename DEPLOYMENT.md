@@ -60,6 +60,15 @@ log with:
 An installation made before asynchronous updates were added must run the
 command-line updater once before the repaired GUI workflow is available.
 
+### Serveo SSH configuration
+
+If a Serveo bridge reports `Bad owner or permissions on
+/etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf`, repair the host package
+configuration once, then start the bridge again:
+
+    sudo chown root:root /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
+    sudo chmod 644 /etc/ssh/ssh_config.d/20-systemd-ssh-proxy.conf
+
 Private raw ext4 image uploads default to 2048 MiB. To choose another limit,
 set `HOMECLOUD_IMAGE_UPLOAD_MAX_MB` in `/etc/homecloud/homecloud.env` and set
 the matching `client_max_body_size` in the HomeCloud nginx configuration.
