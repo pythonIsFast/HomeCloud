@@ -23,10 +23,11 @@ def _payload():
     return data if isinstance(data, dict) else request.form.to_dict()
 
 
-def _handle(callable_):
+def _handle(callable_, success_status=None):
     """Run a service call and turn a domain rejection into a JSON error."""
     try:
-        return callable_()
+        result = callable_()
+        return (result, success_status) if success_status is not None else result
     except service.ComputeError as error:
         return jsonify({"error": str(error)}), error.status
 
