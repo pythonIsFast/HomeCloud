@@ -229,6 +229,8 @@ Wants=network-online.target
 User=root
 Group=homecloud
 UMask=0007
+# Let microVMs survive a worker restart; the worker reconciles them on boot.
+KillMode=process
 WorkingDirectory=/opt/homecloud
 EnvironmentFile=/etc/homecloud/homecloud.env
 ExecStart=/opt/homecloud/.venv/bin/python -m app.vmm
@@ -264,6 +266,20 @@ nginx -t
 systemctl daemon-reload
 systemctl enable --now homecloud-web homecloud-vmm nginx
 ```
+
+## Updating the installation
+
+After a deployment, update HomeCloud from its project directory with:
+
+```bash
+sudo /opt/homecloud/update.sh
+```
+
+The script pulls the tracked Git branch with rebase, installs the pinned Python
+requirements, rebuilds the base image for newly created VMs, and restarts the
+web service and worker. It also ensures a worker restart does not stop running
+Firecracker VMs. Existing VM disks are not modified: recreate pre-terminal VMs
+to remove their legacy SSH access and use the web terminal.
 
 ## 6. Verify and operate
 
