@@ -8,13 +8,24 @@
 (function () {
   "use strict";
 
-  // Hash -> breadcrumb label. The keys double as the valid view names.
-  const VIEWS = {
+  // Hash -> breadcrumb label. A view only counts as available if its section is
+  // actually in the document: #admin exists for admins only, so a normal user
+  // opening that hash falls back to the overview instead of an empty page.
+  const VIEW_LABELS = {
     overview: "overview",
     resources: "resources",
     activity: "activity",
     keys: "api-keys",
+    compute: "compute",
+    admin: "quotas",
   };
+
+  const VIEWS = {};
+  for (const name of Object.keys(VIEW_LABELS)) {
+    if (document.querySelector('.view[data-view="' + name + '"]')) {
+      VIEWS[name] = VIEW_LABELS[name];
+    }
+  }
 
   // Last responses, so switching views or typing in the filter costs no request.
   const state = { resources: [], keys: [], activity: [], view: "overview" };
@@ -432,12 +443,33 @@
     button.addEventListener("click", () => reloadAll(button));
   });
 
+  /** Views registered by the per-service scripts (compute.js, admin.js). */
+  function loadRegisteredViews() {
+    const registered = window.HCViews || {};
+    return Object.keys(registered).map((name) => {
+      try {
+        return registered[name].load();
+      } catch (error) {
+        return Promise.resolve();
+      }
+    });
+  }
+
   async function reloadAll(button) {
     HC.setBusy(button, true);
-    await Promise.all([loadResources(), loadKeys(), loadActivity()]);
+    await Promise.all([
+      loadResources(), loadKeys(), loadActivity(), ...loadRegisteredViews(),
+    ]);
     HC.setBusy(button, false);
   }
 
   showView(window.location.hash.replace("#", ""));
+
+  // The service scripts load after this file, so their registration is not
+  // visible yet -- wait for the document to finish before pulling their data.
+  window.addEventListener("DOMContentLoaded", () => {
+    Promise.all(loadRegisteredViews());
+  });
+
   Promise.all([loadResources(), loadKeys(), loadActivity()]);
 })();

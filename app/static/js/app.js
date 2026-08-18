@@ -194,6 +194,8 @@ const HC = (function () {
     running: "is-ok",
     pending: "is-warn",
     creating: "is-warn",
+    stopping: "is-warn",
+    deleting: "is-warn",
     error: "is-bad",
     stopped: "is-idle",
     deleted: "is-idle",

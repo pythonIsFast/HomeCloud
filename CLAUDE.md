@@ -1,9 +1,12 @@
 # HomeCloud — Project Guide for Claude
 
 HomeCloud is a self-hosted, minimal cloud dashboard — a small private "AWS
-clone" built for learning purposes. It currently provides the foundation
-(auth + resource registry + dashboard). Compute, storage and database services
-will be added later as blueprints under `app/services/`.
+clone" built for learning purposes. It runs standalone on plain Linux hosts and
+depends on no hypervisor management stack.
+
+Present: auth, the shared resource registry, the console, quota administration,
+and **compute** — Firecracker microVMs (section 8). Storage and database
+services will follow as further blueprints under `app/services/`.
 
 **Read this file before writing any code in this repository.** It describes two
 things you must not violate: the dependency policy and the resource pattern.
@@ -49,8 +52,11 @@ why the stdlib route was taken. Two examples already in the codebase:
 - Standard library `sqlite3` only, plain SQL statements, no ORM, no query builder.
 - **Always use parameter binding** (`?` placeholders). Never build SQL with
   f-strings or string concatenation from request data.
-- Go through the helpers in `app/db.py` (`query`, `execute`, `get_db`) so every
-  request reuses one connection and `PRAGMA foreign_keys = ON` stays set.
+- Go through the helpers in `app/db.py` — `query`, `execute` (returns the new
+  row id), `modify` (returns the affected row count, used for atomic state
+  transitions), `get_db` for the request connection and `connect` for the
+  worker. They are what guarantee the tuning PRAGMAs (WAL, busy_timeout,
+  foreign_keys) are set on every connection; see section 9.
 - Schema changes belong in `app/schema.sql` and must be written so that
   re-running the script is harmless (`CREATE TABLE IF NOT EXISTS`, etc.).
 
@@ -95,6 +101,19 @@ Why this shape:
   inside `config_json`. That is an accepted trade-off for a small private
   deployment.
 
+**What the rule does not forbid.** "One table for all service objects" is about
+the things a service *manages* — VMs, buckets, databases. Platform plumbing may
+have its own tables, and currently does:
+
+| table    | why it is not a service object                                  |
+| -------- | --------------------------------------------------------------- |
+| `jobs`   | work queue between the web process and the privileged worker      |
+| `limits` | quota policy, shared by every service, edited by admins           |
+
+If you find yourself wanting a table for "my service's instances", that is the
+rule biting — use `resources`. If you want one for a mechanism the platform
+needs regardless of service, that is fine; document it here.
+
 Rules when adding a service:
 
 1. Create `app/services/<name>/__init__.py` with a `Blueprint`
@@ -119,8 +138,10 @@ HomeCloud/
 │   ├── __init__.py        # application factory create_app(), blueprint registration
 │   ├── config.py          # config from env vars + instance/secret_key handling
 │   ├── db.py              # sqlite3 connection, query/execute helpers, init-db CLI
-│   ├── audit.py           # append-only audit_log writer (cross-cutting)
-│   ├── schema.sql         # the whole DDL for all four tables
+│   ├── audit.py           # append-only audit_log writer + prune-audit CLI
+│   ├── jobs.py            # job queue: web process enqueues, worker claims
+│   ├── limits.py          # per-user quota, installation default + overrides
+│   ├── schema.sql         # the whole DDL (4 registry tables + jobs + limits)
 │   ├── auth/
 │   │   ├── __init__.py    # Blueprint "auth", url_prefix /auth
 │   │   ├── jwt.py         # hand-written JWT (HS256) encode/decode/verify
@@ -131,12 +152,25 @@ HomeCloud/
 │   │   ├── __init__.py    # Blueprint "core"
 │   │   ├── resources.py   # the generic resource registry (see section 2)
 │   │   └── routes.py      # dashboard page, /api/resources, /api/audit, /healthz
-│   ├── services/          # one subpackage per service, added later
+│   ├── services/
+│   │   └── compute/       # Firecracker microVMs (see section 8)
+│   │       ├── __init__.py    # Blueprint "compute", url_prefix /compute
+│   │       ├── flavors.py     # size catalogue
+│   │       ├── service.py     # validation, state machine, quota, enqueue
+│   │       └── routes.py      # JSON API
+│   ├── vmm/               # host side: only the privileged worker runs this
+│   │   ├── net.py             # tap device + NAT, deterministic addressing
+│   │   ├── images.py          # base image build, per-VM disk, key injection
+│   │   ├── firecracker.py     # config, spawn, Unix-socket API, console tail
+│   │   ├── worker.py          # job loop + process supervision
+│   │   └── __main__.py        # python -m app.vmm
 │   ├── static/
 │   │   ├── css/style.css
-│   │   └── js/{app.js,login.js,dashboard.js}
+│   │   └── js/{app.js,login.js,dashboard.js,compute.js,admin.js}
 │   └── templates/{base.html,_icons.html,login.html,dashboard.html}
-├── instance/              # SQLite DB + secret_key (gitignored, not in the repo)
+├── instance/              # gitignored host state, never in the repo:
+│                          #   homecloud.db, secret_key,
+│                          #   bin/{firecracker,jailer}, images/, vms/
 ├── wsgi.py                # gunicorn entry point
 ├── requirements.txt
 ├── .gitignore
@@ -146,13 +180,17 @@ HomeCloud/
 Import direction is one-way and must stay that way:
 
 ```
-app/__init__.py  ->  auth, core
+app/__init__.py  ->  audit, db, auth, core, services/*
 auth             ->  db, audit
-core             ->  db, audit, auth.guards
-services/*       ->  db, audit, auth.guards, core.resources
+core             ->  db, audit, limits, auth.guards, auth.models
+services/*       ->  db, audit, jobs, limits, auth.guards, core.resources
+vmm/*            ->  db, audit, jobs, core.resources   (never auth, never core.routes)
 ```
 
-`db.py` and `audit.py` import nothing from `auth` or `core`.
+`db.py`, `jobs.py`, `limits.py` and `audit.py` import nothing from `auth`,
+`core`, `services` or `vmm`. The web application never imports `vmm` except for
+two read-only helpers (`firecracker.tail_console`, and `images` inside the CLI
+command) — it must never call anything that touches the host.
 
 ---
 
@@ -192,9 +230,24 @@ services/*       ->  db, audit, auth.guards, core.resources
 | `GET`    | `/auth/api/keys`         | yes   | list own API keys (metadata only)  |
 | `POST`   | `/auth/api/keys`         | yes   | create key, returns plaintext once |
 | `DELETE` | `/auth/api/keys/<id>`    | yes   | delete own key                     |
-| `GET`    | `/api/resources`         | yes   | list own resources, `?service_type=` |
+| `GET`    | `/api/resources`         | yes   | own resources, keyset-paged        |
 | `GET`    | `/api/resources/<id>`    | yes   | one resource                       |
-| `GET`    | `/api/audit`             | yes   | recent audit entries               |
+| `GET`    | `/api/audit`             | yes   | recent audit entries, keyset-paged |
+| `GET`    | `/compute/api/flavors`   | yes   | size catalogue + own quota/usage   |
+| `GET`    | `/compute/api/instances` | yes   | own instances, keyset-paged        |
+| `POST`   | `/compute/api/instances` | yes   | create instance (queues a job)     |
+| `GET`    | `/compute/api/instances/<id>` | yes | one instance                    |
+| `POST`   | `/compute/api/instances/<id>/actions/<action>` | yes | start/stop/restart |
+| `DELETE` | `/compute/api/instances/<id>` | yes | delete instance                 |
+| `GET`    | `/compute/api/instances/<id>/console` | yes | serial console tail     |
+| `GET`    | `/api/admin/limits`      | admin | defaults + accounts with usage     |
+| `PUT`    | `/api/admin/limits`      | admin | change installation defaults       |
+| `PUT`    | `/api/admin/limits/<user_id>` | admin | set a user's override         |
+| `DELETE` | `/api/admin/limits/<user_id>` | admin | drop a user's override        |
+
+Every list endpoint is **keyset-paged**: it accepts `?before_id=<id>&limit=<n>`
+and answers with `next_before_id` plus `has_more`. There is no `OFFSET`
+anywhere, and no endpoint returns an unbounded list.
 
 ---
 
@@ -219,7 +272,9 @@ all existing sessions.
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-flask --app app init-db          # creates instance/homecloud.db from schema.sql
+flask --app app init-db               # creates/updates instance/homecloud.db
+flask --app app compute-build-image   # one-off: build the microVM base image
+flask --app app show-config           # check the resolved paths
 flask --app app run --debug --port 6002               # development
 gunicorn --workers 2 --bind 127.0.0.1:6002 wsgi:app   # production
 ```
@@ -363,9 +418,20 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
   `HC.formatDateTime()` (absolute, `YYYY-MM-DD HH:MM`) or `HC.formatAge()`
   (`5m ago`). Both add the `Z` before parsing.
 - The console is one page with hash-routed views (`#overview`, `#resources`,
-  `#activity`, `#keys`). A new view needs a `<section class="view"
-  data-view="x">`, an entry in the `VIEWS` map and a `.nav-item[data-view="x"]`.
-  Services without a blueprint are `.nav-item.is-disabled` placeholders.
+  `#activity`, `#keys`, `#compute`, `#admin`). A new view needs a
+  `<section class="view" data-view="x">`, an entry in `VIEW_LABELS` in
+  dashboard.js and a `.nav-item[data-view="x"]`. A view only counts as available
+  if its section is actually in the DOM — that is how `#admin` stays invisible
+  to non-admins instead of rendering an empty page. Services without a blueprint
+  are `.nav-item.is-disabled` placeholders.
+- **A service brings its own script** (`compute.js`, `admin.js`), loaded after
+  `dashboard.js`, registering itself as
+  `window.HCViews.<name> = { load: () => ... }`. The shell calls every
+  registered `load()` on boot and on Refresh, so `dashboard.js` never has to
+  know which services exist. Do not put service logic into `dashboard.js`.
+- Poll only while something is in flight: the compute view refreshes every 3 s
+  while an instance is `pending`/`creating`/`stopping`/`deleting`, and stops once
+  everything has settled. Never poll a quiet page.
 - Keyboard: `/` focuses the resource filter, `Escape` closes menu, off-canvas
   nav and modal. Keep new shortcuts single-key and non-destructive.
 - Accessibility is part of "done": one focus outline for everything,
@@ -375,7 +441,156 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
 
 ---
 
-## 8. Git workflow (follow this for every change)
+## 8. Compute service: Firecracker microVMs
+
+An instance is a `resources` row with `service_type='compute'`. Inside it the
+user is root and does whatever they want — isolation comes from KVM, which is
+why there is no sandboxing code in this project.
+
+### Privilege split (the central design decision)
+
+```
+browser ──HTTP──> Flask (unprivileged)  ──INSERT──> jobs table
+                                                       │
+                                            SELECT ... claim
+                                                       ▼
+                                    app/vmm worker (root) ──> tap, NAT, firecracker
+```
+
+The web process **never** touches KVM, tap devices, images or processes. It
+validates, checks quota, writes a `resources` row plus a `jobs` row, and answers
+`202`. The worker does the slow, privileged part. Consequences to respect:
+
+- A gunicorn worker is recycled and its children would be orphaned, so spawning
+  a VM from a request handler is not an option — not even "just for testing".
+- Root is needed **only** for networking. Disk work is deliberately
+  unprivileged: `mke2fs -d` builds a filesystem from a directory, `cp
+  --sparse=always` copies the base image, `debugfs -w` writes the SSH key into
+  an unmounted ext4. No loop mounts, so no leaked mounts.
+- If the worker is not running, instances stay in `pending`. That is correct
+  behaviour, not a bug — the UI says so in the empty state.
+
+### Addressing without a lease table
+
+Each VM gets a /30 derived from its resource id:
+
+```
+offset  = id * 4                    id 1  -> 10.71.0.4/30, host .5, guest .6
+network = 10.71.<offset//256>.<offset%256>/30
+tap     = hc-vm<id>                 MAC   = 06:00 + the four address bytes
+```
+
+Verified deterministic and collision-free for the full range; ids above 16383
+are rejected. Because the id *is* the reservation there is no allocation table,
+no lock and no race. The guest gets its address from the kernel command line
+(`ip=...`), so there is no DHCP server to run.
+
+### State machine
+
+```
+pending ──> creating ──> running ⇄ stopped ──> deleting ──> deleted
+                   ↘         ↘         ↙
+                        error
+```
+
+Allowed transitions live in one table, `service.TRANSITIONS`. Every action is an
+atomic `UPDATE ... WHERE id = ? AND status IN (...)` via
+`resources.transition()`, so two parallel "start" requests produce exactly one
+job — the loser gets a 409. Never compare statuses by hand in a route.
+
+The worker also *reconciles*: a guest that runs `poweroff` makes firecracker
+exit, and nothing would tell the database. Each idle pass checks the recorded
+pid (including a `/proc/<pid>/cmdline` check, so a recycled pid cannot fool it)
+and writes back `stopped`.
+
+### Host setup (one-off, the operator does this)
+
+```bash
+# 1. binaries and images, all under instance/ and gitignored
+#    firecracker + jailer  -> instance/bin/
+#    vmlinux-6.1.155       -> instance/images/
+#    ubuntu-24.04.squashfs -> instance/images/
+# 2. build the writable base image (no root needed)
+flask --app app compute-build-image
+# 3. check the resolved paths
+flask --app app show-config
+# 4. run the privileged worker
+sudo -E env "PATH=$PATH" .venv/bin/python -m app.vmm
+```
+
+Requirements: `/dev/kvm`, `ip`, `iptables`, `e2fsprogs`, `squashfs-tools`. The
+worker refuses to start with a clear message if any of them is missing rather
+than failing per-VM later.
+
+### Quota
+
+`limits` holds the installation default (`user_id IS NULL`) and per-user
+overrides. `limits.check_new_vm()` compares count *and* the sums of vCPU, memory
+and disk against the effective limits before a row is written. These are real
+limits, not advisory numbers: a microVM cannot exceed the vCPU and memory it was
+configured with, and its disk is a fixed-size image.
+
+---
+
+## 9. Scaling notes
+
+The current shape is one host, one SQLite file, one worker. Where that ends and
+what was done about it:
+
+### Already done
+
+- **WAL, `busy_timeout=5000`, `synchronous=NORMAL`** in `db.connect()`. Without
+  WAL a single INSERT blocks every concurrent SELECT; without the timeout a lock
+  conflict fails instantly with "database is locked". Set them on a *fresh*
+  connection — `PRAGMA journal_mode` is silently ignored inside a transaction.
+- **Keyset pagination everywhere**, never `OFFSET`. Page 200 must cost what page
+  1 costs.
+- **Covering indexes** for the queries that exist:
+  `resources(user_id, service_type, id DESC)`, `audit_log(user_id, id DESC)`,
+  `jobs(status, host, id)`.
+- **`last_used_at` throttling** on the API-key path. Stamping it on every
+  request turned a read workload into a write-bound one; it now refreshes at
+  most every 5 minutes, via a condition inside the UPDATE.
+- **`prune-audit` CLI** — `audit_log` is append-only and would otherwise grow
+  without bound. Run it from cron; there is no scheduler in this project.
+
+### Known ceilings
+
+- **One SQLite file means one host.** Several app servers sharing the file over
+  NFS is broken, not slow. Rough estimate, unmeasured: WAL sustains hundreds of
+  writes per second and many concurrent readers on local SSD.
+- **One worker per host.** `jobs.host` already exists, so a second compute host
+  is "run another worker"; nothing in the schema has to change.
+- **Memory is the real limit on VM density**, not the database.
+
+### Postgres migration checklist
+
+The plan is to move when deploying. Deliberately no abstraction layer yet — it
+would be guesswork. What has to change, all of it inside `db.py`, `jobs.py`,
+`limits.py`, `audit.py` and `core/resources.py`:
+
+| SQLite                       | Postgres                                  |
+| ---------------------------- | ----------------------------------------- |
+| `?` placeholders             | `%s`                                      |
+| `datetime('now')`            | `now()`                                   |
+| `datetime('now', '-5 minutes')` | `now() - interval '5 minutes'`         |
+| `INTEGER PRIMARY KEY AUTOINCREMENT` | `GENERATED BY DEFAULT AS IDENTITY` |
+| `INSERT OR IGNORE`           | `ON CONFLICT DO NOTHING`                  |
+| `json_extract(col, '$.k')`   | `col::jsonb -> 'k'`                       |
+| `cursor.lastrowid`           | `RETURNING id`                            |
+| `sqlite3.Row`                | `RealDictCursor` or a row factory         |
+
+A Postgres driver (`psycopg`) is a third-party package and therefore a
+**documented exception** to section 1.1, agreed for the deployment step. It does
+not open the door to other packages: the ORM ban, the hand-written JWT and the
+no-frontend-dependencies rule all stay.
+
+The atomic-claim pattern (`UPDATE ... WHERE status = 'queued'`) works unchanged
+on Postgres, and can later be sharpened with `FOR UPDATE SKIP LOCKED`.
+
+---
+
+## 10. Git workflow (follow this for every change)
 
 1. `git pull --rebase`
 2. **If the pull fails: stop and abort.** Do not code, do not force anything,

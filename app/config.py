@@ -52,4 +52,31 @@ def build_config(instance_path):
         "JWT_COOKIE_SECURE": os.environ.get("HOMECLOUD_COOKIE_SECURE", "0") == "1",
         # Allow self-service registration. Turn off after creating your accounts.
         "ALLOW_REGISTRATION": os.environ.get("HOMECLOUD_ALLOW_REGISTRATION", "1") == "1",
+
+        # --- compute service / Firecracker -------------------------------
+        # Binaries and images live under instance/ because they are host state,
+        # not source code, and instance/ is gitignored.
+        "FIRECRACKER_BIN": os.environ.get(
+            "HOMECLOUD_FIRECRACKER_BIN", os.path.join(instance_path, "bin", "firecracker")
+        ),
+        "VM_DIR": os.path.join(instance_path, "vms"),
+        "IMAGE_DIR": os.path.join(instance_path, "images"),
+        "VM_KERNEL": os.environ.get(
+            "HOMECLOUD_VM_KERNEL",
+            os.path.join(instance_path, "images", "vmlinux-6.1.155"),
+        ),
+        # Writable ext4 built once from the CI squashfs; see vmm/images.py.
+        "VM_BASE_ROOTFS": os.environ.get(
+            "HOMECLOUD_VM_BASE_ROOTFS",
+            os.path.join(instance_path, "images", "base-ubuntu-24.04.ext4"),
+        ),
+        "VM_BASE_SQUASHFS": os.environ.get(
+            "HOMECLOUD_VM_BASE_SQUASHFS",
+            os.path.join(instance_path, "images", "ubuntu-24.04.squashfs"),
+        ),
+        # First two octets of the VM range. Each VM gets a /30 derived from its
+        # resource id, so 10.71.0.0/16 holds 16383 VMs without any lease table.
+        "VM_SUBNET_PREFIX": os.environ.get("HOMECLOUD_VM_SUBNET_PREFIX", "10.71"),
+        # Interface the NAT rule masquerades to. Empty = detect the default route.
+        "VM_EGRESS_IF": os.environ.get("HOMECLOUD_VM_EGRESS_IF", ""),
     }

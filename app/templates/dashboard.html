@@ -31,11 +31,11 @@
 
       <div class="nav-group">
         <div class="nav-heading label-micro">Services</div>
-        {# Placeholders: each becomes a blueprint under app/services/. #}
-        <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
+        <button class="nav-item" data-view="compute" type="button">
           <svg><use href="#i-cpu"></use></svg><span class="nav-label">Compute</span>
-          <span class="nav-count">—</span>
-        </span>
+          <span class="nav-count" id="nav-count-compute">0</span>
+        </button>
+        {# Placeholders: each becomes a blueprint under app/services/. #}
         <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
           <svg><use href="#i-bucket"></use></svg><span class="nav-label">Storage</span>
           <span class="nav-count">—</span>
@@ -45,6 +45,15 @@
           <span class="nav-count">—</span>
         </span>
       </div>
+
+      {% if user['role'] == 'admin' %}
+      <div class="nav-group">
+        <div class="nav-heading label-micro">Administration</div>
+        <button class="nav-item" data-view="admin" type="button">
+          <svg><use href="#i-sliders"></use></svg><span class="nav-label">Quotas</span>
+        </button>
+      </div>
+      {% endif %}
     </nav>
 
     <div class="sidebar-foot">
@@ -321,6 +330,231 @@
         </div>
       </section>
 
+      {# -------------------------------------------------------- view: compute #}
+      <section class="view" data-view="compute" hidden>
+        <div class="view-head">
+          <div>
+            <h1>Compute</h1>
+            <p class="view-sub">
+              Firecracker microVMs. Each instance is a real kernel with its own
+              disk — inside it you are root and it is yours. Reach it over SSH
+              with the key you provide at creation.
+            </p>
+          </div>
+          <div class="view-head-actions">
+            <button class="btn" data-action="reload" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric tone-brand">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">Instances</span>
+            </div>
+            <div class="metric-value" id="quota-vms">–</div>
+            <div class="metric-note" id="quota-vms-note">&nbsp;</div>
+          </div>
+          <div class="metric tone-info">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">vCPU</span>
+            </div>
+            <div class="metric-value" id="quota-vcpu">–</div>
+            <div class="metric-note" id="quota-vcpu-note">&nbsp;</div>
+          </div>
+          <div class="metric tone-warn">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">Memory</span>
+            </div>
+            <div class="metric-value" id="quota-memory">–</div>
+            <div class="metric-note" id="quota-memory-note">&nbsp;</div>
+          </div>
+          <div class="metric tone-ok">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">Disk</span>
+            </div>
+            <div class="metric-value" id="quota-disk">–</div>
+            <div class="metric-note" id="quota-disk-note">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>New instance</h2></div>
+          <div class="panel-body">
+            <form id="create-vm-form" autocomplete="off">
+              <div class="field-row top">
+                <div class="field field-grow">
+                  <label class="field-label" for="vm-name">Name</label>
+                  <input class="input" id="vm-name" name="name" required
+                         placeholder="web-01" spellcheck="false">
+                  <p class="field-note">Lowercase, digits and dashes, 3–32 characters.</p>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="vm-flavor">Size</label>
+                  <select class="select" id="vm-flavor" aria-label="Instance size"></select>
+                  <p class="field-note" id="vm-flavor-note">&nbsp;</p>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="field-label" for="vm-ssh-key">SSH public key</label>
+                <textarea class="input textarea" id="vm-ssh-key" rows="3" spellcheck="false"
+                          placeholder="ssh-ed25519 AAAAC3Nza... you@laptop"></textarea>
+                <p class="field-note">
+                  The contents of <code>~/.ssh/id_ed25519.pub</code>. Written into the
+                  instance as <code>/root/.ssh/authorized_keys</code>; there is no
+                  password login.
+                </p>
+              </div>
+
+              <p class="field-error hidden" id="create-vm-error" role="alert"></p>
+
+              <button class="btn btn-solid" type="submit" id="create-vm-submit">
+                Create instance
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Instances</h2>
+            <div class="panel-head-actions">
+              <span class="label-micro" id="vm-poll-note">auto-refresh while busy</span>
+            </div>
+          </div>
+          <div class="panel-body flush">
+            <div class="table-scroll">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th style="width:56px">ID</th>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Status</th>
+                    <th>Address</th>
+                    <th>Created</th>
+                    <th style="width:230px"></th>
+                  </tr>
+                </thead>
+                <tbody id="vm-body"></tbody>
+              </table>
+            </div>
+            <div class="empty hidden" id="vm-empty">
+              <strong>No instances.</strong> Create one above. The privileged worker
+              (<code>sudo python -m app.vmm</code>) has to be running, otherwise the
+              instance stays in <code>pending</code>.
+            </div>
+          </div>
+          <div class="panel-foot">
+            <span id="vm-foot">0 instances</span>
+            <button class="btn btn-link hidden" id="vm-more" type="button">Load more</button>
+          </div>
+        </div>
+
+        <div class="panel hidden" id="console-panel">
+          <div class="panel-head">
+            <h2>Serial console — <span class="mono" id="console-name"></span></h2>
+            <div class="panel-head-actions">
+              <button class="btn btn-sm" id="console-refresh" type="button">Reload</button>
+              <button class="btn btn-sm btn-quiet" id="console-close" type="button">Close</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <pre class="console-out mono" id="console-out"></pre>
+            <p class="field-note">
+              Boot output straight from the guest. Empty until the kernel starts
+              writing — useful when an instance goes to <code>error</code>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {# ---------------------------------------------------------- view: admin #}
+      {% if user['role'] == 'admin' %}
+      <section class="view" data-view="admin" hidden>
+        <div class="view-head">
+          <div>
+            <h1>Quotas</h1>
+            <p class="view-sub">
+              A microVM reserves real memory and real disk. These limits are what
+              keeps one account from taking the host down. The default applies to
+              everyone; an override replaces it for a single user.
+            </p>
+          </div>
+          <div class="view-head-actions">
+            <button class="btn" data-action="reload" type="button">Refresh</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Installation default</h2></div>
+          <div class="panel-body">
+            <form id="defaults-form" autocomplete="off">
+              <div class="field-row">
+                <div class="field">
+                  <label class="field-label" for="default-max-vms">Instances</label>
+                  <input class="input input-num" id="default-max-vms" type="number" min="0">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="default-max-vcpu">vCPU</label>
+                  <input class="input input-num" id="default-max-vcpu" type="number" min="0">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="default-max-memory">Memory (MB)</label>
+                  <input class="input input-num-wide" id="default-max-memory" type="number" min="0">
+                </div>
+                <div class="field">
+                  <label class="field-label" for="default-max-disk">Disk (GB)</label>
+                  <input class="input input-num-wide" id="default-max-disk" type="number" min="0">
+                </div>
+                <button class="btn btn-solid" type="submit" id="defaults-submit">
+                  Save default
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Per user</h2>
+            <div class="panel-head-actions">
+              <div class="find">
+                <svg><use href="#i-search"></use></svg>
+                <input class="input" id="admin-search" type="search"
+                       placeholder="Filter by email" aria-label="Filter users">
+              </div>
+            </div>
+          </div>
+          <div class="panel-body flush">
+            <div class="table-scroll">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th style="width:56px">ID</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>In use</th>
+                    <th>Instances</th>
+                    <th>vCPU</th>
+                    <th>Memory MB</th>
+                    <th>Disk GB</th>
+                    <th style="width:150px"></th>
+                  </tr>
+                </thead>
+                <tbody id="admin-body"></tbody>
+              </table>
+            </div>
+            <div class="empty hidden" id="admin-empty">No accounts match.</div>
+          </div>
+          <div class="panel-foot">
+            <span id="admin-foot">&nbsp;</span>
+            <button class="btn btn-link hidden" id="admin-more" type="button">Load more</button>
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
     </main>
   </div>
 </div>
@@ -347,5 +581,11 @@
 {% endblock %}
 
 {% block scripts %}
+{# Order matters: the shell first, then the per-view scripts that register
+   themselves with it through window.HCViews. #}
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/compute.js') }}"></script>
+{% if user['role'] == 'admin' %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endif %}
 {% endblock %}

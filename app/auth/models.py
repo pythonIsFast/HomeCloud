@@ -42,6 +42,35 @@ def count_users():
     return row["n"]
 
 
+def list_users_page(before_id=None, limit=50, search=None):
+    """One keyset page of accounts, newest first -- for the admin view.
+
+    Paged for the same reason as everything else: an installation with ten
+    thousand accounts must not build a ten-thousand-row response.
+    """
+    limit = max(1, min(int(limit), 200))
+    clauses = []
+    params = []
+
+    if before_id is not None:
+        clauses.append("id < ?")
+        params.append(int(before_id))
+    if search:
+        clauses.append("email LIKE ?")
+        params.append(f"%{search.strip().lower()}%")
+
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    params.append(limit + 1)
+
+    rows = db.query(
+        "SELECT id, email, role, created_at FROM users" + where
+        + " ORDER BY id DESC LIMIT ?",
+        tuple(params),
+    )
+    has_more = len(rows) > limit
+    return list(rows[:limit]), has_more
+
+
 def verify_password(user_row, password):
     """Constant-time-ish password check via werkzeug."""
     return check_password_hash(user_row["password_hash"], password)
@@ -68,8 +97,19 @@ def create_api_key(user_id, label=""):
     return row_id, plaintext
 
 
+# How stale last_used_at may get before we write it again. Every write in SQLite
+# takes an exclusive lock on the whole database, so stamping on every single API
+# request would turn a read-only workload into a write-bound one. Five minutes
+# is precise enough to answer "is this key still in use?".
+LAST_USED_RESOLUTION = "-5 minutes"
+
+
 def get_user_by_api_key(plaintext):
-    """Resolve an API key to its owner, or None. Also stamps last_used_at."""
+    """Resolve an API key to its owner, or None.
+
+    Refreshes last_used_at at most once per LAST_USED_RESOLUTION. The UPDATE
+    carries that condition itself, so no extra SELECT and no race.
+    """
     if not plaintext:
         return None
     row = db.query(
@@ -77,8 +117,12 @@ def get_user_by_api_key(plaintext):
     )
     if row is None:
         return None
+
     db.execute(
-        "UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?", (row["id"],)
+        "UPDATE api_keys SET last_used_at = datetime('now')"
+        " WHERE id = ? AND (last_used_at IS NULL"
+        "                   OR last_used_at < datetime('now', ?))",
+        (row["id"], LAST_USED_RESOLUTION),
     )
     return get_user_by_id(row["user_id"])
 

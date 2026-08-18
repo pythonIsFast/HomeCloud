@@ -75,3 +75,69 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log (created_at);
+
+-- The console filters by user and pages by descending id, so the index has to
+-- cover both or SQLite falls back to a full scan plus a sort.
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_id ON audit_log (user_id, id DESC);
+
+-- Keyset pagination over resources reads (user_id, service_type) in id order.
+CREATE INDEX IF NOT EXISTS idx_resources_page
+    ON resources (user_id, service_type, id DESC);
+
+-- ===========================================================================
+-- Platform infrastructure below this line.
+--
+-- These are NOT service object tables -- the "one shared resources table" rule
+-- applies to the things a service manages (VMs, buckets, databases), not to
+-- the plumbing the platform itself needs. See CLAUDE.md section 2.
+-- ===========================================================================
+
+-- ---------------------------------------------------------------------------
+-- jobs: work that must not happen inside a web request.
+--
+-- Creating a microVM takes seconds and needs root (tap device, NAT), so the
+-- Flask process only enqueues here and the privileged worker executes.
+-- "host" lets a second compute host later claim only its own jobs; NULL means
+-- "any worker may take it".
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS jobs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id  INTEGER,
+    user_id      INTEGER,
+    action       TEXT    NOT NULL,              -- create | start | stop | restart | delete
+    payload_json TEXT    NOT NULL DEFAULT '{}',
+    status       TEXT    NOT NULL DEFAULT 'queued',  -- queued|running|done|failed
+    host         TEXT,
+    attempts     INTEGER NOT NULL DEFAULT 0,
+    error        TEXT,
+    created_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+    claimed_at   TEXT,
+    finished_at  TEXT,
+    FOREIGN KEY (resource_id) REFERENCES resources (id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)     REFERENCES users (id)     ON DELETE SET NULL
+);
+
+-- The worker polls exactly this: oldest queued job for its host.
+CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs (status, host, id);
+CREATE INDEX IF NOT EXISTS idx_jobs_resource ON jobs (resource_id, id DESC);
+
+-- ---------------------------------------------------------------------------
+-- limits: quota per user, plus the installation-wide default.
+--
+-- The row with user_id IS NULL is the default that applies to everyone; a row
+-- with a user_id overrides it for that user. Admins edit both in the console.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS limits (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        INTEGER UNIQUE,       -- NULL = installation default
+    max_vms        INTEGER NOT NULL DEFAULT 2,
+    max_vcpu       INTEGER NOT NULL DEFAULT 4,
+    max_memory_mb  INTEGER NOT NULL DEFAULT 2048,
+    max_disk_gb    INTEGER NOT NULL DEFAULT 20,
+    updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+-- Seed the installation default once. INSERT OR IGNORE keeps init-db idempotent
+-- and never overwrites limits an admin has already changed.
+INSERT OR IGNORE INTO limits (id, user_id) VALUES (1, NULL);

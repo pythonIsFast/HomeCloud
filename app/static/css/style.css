@@ -1067,3 +1067,82 @@ table.data td.right { text-align: right; }
 }
 
 @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } }
+
+/* ===========================================================================
+   Compute and admin views
+   =========================================================================== */
+
+/* The panel footer carries a summary on the left and "Load more" on the right. */
+.panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* A row of fields that ends in a button, e.g. the quota editor. */
+.field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.field-row .field { margin: 0; }
+.field-row.top { align-items: flex-start; }
+.field-grow { flex: 1 1 200px; min-width: 180px; }
+
+.input-num { width: 104px; }
+.input-num-wide { width: 124px; }
+
+/* Multi-line input for keys and config: mono, resizable, same frame as .input. */
+.textarea {
+  height: auto;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* Serial console output. Scrolls inside its own box so the page never does. */
+.console-out {
+  max-height: 340px;
+  margin: 0 0 10px;
+  padding: 12px;
+  overflow: auto;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--fg-secondary);
+}
+
+/* Quota cell: "used / allowed", the used part emphasised. */
+.quota { font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
+.quota .used { color: var(--fg); }
+.quota .sep, .quota .cap { color: var(--fg-muted); }
+.quota.is-full .used { color: var(--bad); }
+
+/* Inline number input inside a table row (admin per-user limits). */
+table.data td .input {
+  height: 26px;
+  width: 88px;
+  padding: 0 7px;
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+}
+
+.badge-override {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--t-micro);
+  font-weight: 600;
+}

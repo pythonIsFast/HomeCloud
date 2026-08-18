@@ -9,6 +9,7 @@ import os
 
 from flask import Flask
 
+from . import audit
 from . import config as app_config
 from . import db
 
@@ -30,6 +31,10 @@ def create_app(test_config=None):
 
     # Database: teardown handler + "flask --app app init-db" CLI command.
     db.register(app)
+    # "flask --app app prune-audit"
+    audit.register(app)
+    # "flask --app app compute-build-image"
+    register_cli(app)
 
     # ---- Blueprints -------------------------------------------------------
     # auth: registration, login/logout, JWT, API keys
@@ -37,13 +42,50 @@ def create_app(test_config=None):
 
     app.register_blueprint(auth_bp)
 
-    # core: dashboard page and the service-agnostic resource registry API
+    # core: dashboard page, resource registry API, admin quota endpoints
     from .core import bp as core_bp
 
     app.register_blueprint(core_bp)
 
-    # services/: one blueprint per service will be added here later, e.g.
-    #   from .services.compute import bp as compute_bp
-    #   app.register_blueprint(compute_bp)
+    # services/: one blueprint per service.
+    from .services.compute import bp as compute_bp
+
+    app.register_blueprint(compute_bp)
 
     return app
+
+
+def register_cli(app):
+    """Setup commands that are neither database nor audit related."""
+    import click
+
+    @app.cli.command("compute-build-image")
+    @click.option("--size-mb", default=1024, show_default=True,
+                  help="Size of the base image; each VM grows its own copy.")
+    def compute_build_image(size_mb):
+        """Build the writable ext4 base image from the Firecracker CI squashfs.
+
+        Run once after downloading the images. Needs no root: mke2fs builds the
+        filesystem from a directory tree without mounting anything.
+        """
+        # Imported here so the web app does not pull in the VM modules on every
+        # start -- they are only needed for setup and for the worker.
+        from .vmm import images
+
+        images.build_base_image(
+            app.config["VM_BASE_SQUASHFS"],
+            app.config["VM_BASE_ROOTFS"],
+            size_mb=size_mb,
+            log=click.echo,
+        )
+
+    @app.cli.command("show-config")
+    def show_config():
+        """Print the resolved paths, to check a deployment without guessing."""
+        for key in ("DATABASE", "FIRECRACKER_BIN", "VM_KERNEL", "VM_BASE_ROOTFS",
+                    "VM_BASE_SQUASHFS", "VM_DIR", "VM_SUBNET_PREFIX"):
+            value = app.config[key]
+            marker = ""
+            if key not in ("VM_SUBNET_PREFIX",) and not os.path.exists(str(value)):
+                marker = "   <-- missing"
+            click.echo(f"{key:18} {value}{marker}")
