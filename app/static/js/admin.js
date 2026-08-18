@@ -18,10 +18,24 @@
   const updateDetail = document.getElementById("admin-update-detail");
   const updateCheck = document.getElementById("admin-update-check");
   const updateRun = document.getElementById("admin-update-run");
+  const adminTabs = document.querySelectorAll("[data-admin-tab]");
+  const adminPanels = document.querySelectorAll("[data-admin-panel]");
 
   const FIELDS = ["max_vms", "max_vcpu", "max_memory_mb", "max_disk_gb"];
 
   const state = { users: [], defaults: null, nextBeforeId: null, query: "" };
+
+  function selectAdminTab(name) {
+    adminTabs.forEach((tab) => {
+      const active = tab.dataset.adminTab === name;
+      tab.toggleAttribute("aria-current", active);
+      if (active) tab.setAttribute("aria-current", "page");
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    adminPanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.adminPanel !== name));
+  }
+
+  adminTabs.forEach((tab) => tab.addEventListener("click", () => selectAdminTab(tab.dataset.adminTab)));
 
   function renderUpdateStatus(data) {
     const check = data.check || {};

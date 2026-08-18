@@ -40,8 +40,8 @@
       {% if user['role'] == 'admin' %}
       <div class="nav-group">
         <div class="nav-heading label-micro">Administration</div>
-        <button class="nav-item" data-view="admin" type="button">
-          <svg><use href="#i-sliders"></use></svg><span class="nav-label">Quotas</span>
+          <button class="nav-item" data-view="admin" type="button">
+          <svg><use href="#i-sliders"></use></svg><span class="nav-label">Administration</span>
         </button>
       </div>
       {% endif %}
@@ -562,11 +562,9 @@
       <section class="view" data-view="admin" hidden>
         <div class="view-head">
           <div>
-            <h1>Quotas</h1>
+            <h1>Administration</h1>
             <p class="view-sub">
-              A microVM reserves real memory and real disk. These limits are what
-              keeps one account from taking the host down. The default applies to
-              everyone; an override replaces it for a single user.
+              Manage account quotas and platform maintenance.
             </p>
           </div>
           <div class="view-head-actions">
@@ -574,6 +572,12 @@
           </div>
         </div>
 
+        <div class="detail-tabs admin-tabs" role="tablist" aria-label="Administration sections">
+          <button class="detail-tab" type="button" role="tab" aria-selected="true" aria-current="page" data-admin-tab="quotas">Quotas</button>
+          <button class="detail-tab" type="button" role="tab" aria-selected="false" data-admin-tab="updates">Updates</button>
+        </div>
+
+        <div class="admin-tab-panel" data-admin-panel="quotas">
         <div class="panel">
           <div class="panel-head"><h2>Installation default</h2></div>
           <div class="panel-body">
@@ -640,7 +644,9 @@
             <button class="btn btn-link hidden" id="admin-more" type="button">Load more</button>
           </div>
         </div>
+        </div>
 
+        <div class="admin-tab-panel hidden" data-admin-panel="updates">
         <div class="panel">
           <div class="panel-head">
             <div>
@@ -657,6 +663,7 @@
               Updates are pulled from the configured Git origin and applied by the privileged worker.
             </p>
           </div>
+        </div>
         </div>
       </section>
       {% endif %}

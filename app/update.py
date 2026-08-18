@@ -19,9 +19,10 @@ def _repository_dir():
 
 
 def _git(*args):
+    repository = _repository_dir()
     result = subprocess.run(
-        ["git", *args],
-        cwd=_repository_dir(),
+        ["git", "-c", f"safe.directory={repository}", *args],
+        cwd=repository,
         capture_output=True,
         text=True,
         timeout=15,
@@ -48,7 +49,8 @@ def check():
             "checked_at": int(time.time()),
         }
     except (OSError, subprocess.SubprocessError, ValueError, IndexError) as error:
-        return {"ok": False, "error": str(error)}
+        detail = getattr(error, "stderr", "") or str(error)
+        return {"ok": False, "error": detail.strip()}
 
 
 def request(user_id):
