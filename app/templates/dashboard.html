@@ -337,8 +337,8 @@
             <h1>Compute</h1>
             <p class="view-sub">
               Firecracker microVMs. Each instance is a real kernel with its own
-              disk — inside it you are root and it is yours. Reach it over SSH
-              with the key you provide at creation.
+              disk — inside it you are root and it is yours. Open its terminal
+              directly from this console; no SSH key is needed.
             </p>
           </div>
           <div class="view-head-actions">
@@ -395,17 +395,6 @@
                 </div>
               </div>
 
-              <div class="field">
-                <label class="field-label" for="vm-ssh-key">SSH public key</label>
-                <textarea class="input textarea" id="vm-ssh-key" rows="3" spellcheck="false"
-                          placeholder="ssh-ed25519 AAAAC3Nza... you@laptop"></textarea>
-                <p class="field-note">
-                  The contents of <code>~/.ssh/id_ed25519.pub</code>. Written into the
-                  instance as <code>/root/.ssh/authorized_keys</code>; there is no
-                  password login.
-                </p>
-              </div>
-
               <p class="field-error hidden" id="create-vm-error" role="alert"></p>
 
               <button class="btn btn-solid" type="submit" id="create-vm-submit">
@@ -453,17 +442,18 @@
 
         <div class="panel hidden" id="console-panel">
           <div class="panel-head">
-            <h2>Serial console — <span class="mono" id="console-name"></span></h2>
+            <h2>Terminal — <span class="mono" id="console-name"></span></h2>
             <div class="panel-head-actions">
-              <button class="btn btn-sm" id="console-refresh" type="button">Reload</button>
+              <button class="btn btn-sm" id="console-refresh" type="button">Reconnect</button>
               <button class="btn btn-sm btn-quiet" id="console-close" type="button">Close</button>
             </div>
           </div>
           <div class="panel-body">
-            <pre class="console-out mono" id="console-out"></pre>
+            <pre class="console-out mono" id="console-out" tabindex="0"
+                 aria-label="Terminal output"></pre>
             <p class="field-note">
-              Boot output straight from the guest. Empty until the kernel starts
-              writing — useful when an instance goes to <code>error</code>.
+              Click the terminal and type. It is a root serial session inside this
+              instance, guarded by your HomeCloud account.
             </p>
           </div>
         </div>

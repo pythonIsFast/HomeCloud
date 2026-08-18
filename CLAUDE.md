@@ -162,6 +162,7 @@ HomeCloud/
 │   │   ├── net.py             # tap device + NAT, deterministic addressing
 │   │   ├── images.py          # base image build, per-VM disk, key injection
 │   │   ├── firecracker.py     # config, spawn, Unix-socket API, console tail
+│   │   ├── console.py         # worker-owned serial input bridge for the web terminal
 │   │   ├── worker.py          # job loop + process supervision
 │   │   └── __main__.py        # python -m app.vmm
 │   ├── static/
@@ -190,7 +191,9 @@ vmm/*            ->  db, audit, jobs, core.resources   (never auth, never core.r
 `db.py`, `jobs.py`, `limits.py` and `audit.py` import nothing from `auth`,
 `core`, `services` or `vmm`. The web application never imports `vmm` except for
 two read-only helpers (`firecracker.tail_console`, and `images` inside the CLI
-command) — it must never call anything that touches the host.
+command), plus the scoped `console.send_input` Unix-socket client. That client
+only sends keystrokes to a worker-owned bridge; it cannot access KVM, processes,
+tap devices or VM files.
 
 ---
 
@@ -239,7 +242,8 @@ command) — it must never call anything that touches the host.
 | `GET`    | `/compute/api/instances/<id>` | yes | one instance                    |
 | `POST`   | `/compute/api/instances/<id>/actions/<action>` | yes | start/stop/restart |
 | `DELETE` | `/compute/api/instances/<id>` | yes | delete instance                 |
-| `GET`    | `/compute/api/instances/<id>/console` | yes | serial console tail     |
+| `GET`    | `/compute/api/instances/<id>/console` | yes | serial terminal output  |
+| `POST`   | `/compute/api/instances/<id>/console/input` | yes | send terminal keys |
 | `GET`    | `/api/admin/limits`      | admin | defaults + accounts with usage     |
 | `PUT`    | `/api/admin/limits`      | admin | change installation defaults       |
 | `PUT`    | `/api/admin/limits/<user_id>` | admin | set a user's override         |
@@ -465,8 +469,7 @@ validates, checks quota, writes a `resources` row plus a `jobs` row, and answers
   a VM from a request handler is not an option — not even "just for testing".
 - Root is needed **only** for networking. Disk work is deliberately
   unprivileged: `mke2fs -d` builds a filesystem from a directory, `cp
-  --sparse=always` copies the base image, `debugfs -w` writes the SSH key into
-  an unmounted ext4. No loop mounts, so no leaked mounts.
+  --sparse=always` copies the base image. No loop mounts, so no leaked mounts.
 - If the worker is not running, instances stay in `pending`. That is correct
   behaviour, not a bug — the UI says so in the empty state.
 
@@ -521,6 +524,16 @@ sudo -E env "PATH=$PATH" .venv/bin/python -m app.vmm
 Requirements: `/dev/kvm`, `ip`, `iptables`, `e2fsprogs`, `squashfs-tools`. The
 worker refuses to start with a clear message if any of them is missing rather
 than failing per-VM later.
+
+### Web terminal, no SSH keys
+
+Instance creation does not accept an SSH key. The base image masks the guest's
+OpenSSH units and configures `serial-getty@ttyS0` to log in as root. The UI
+opens that serial terminal only after HomeCloud has authenticated and authorized
+the resource owner. The web process sends at most 4096 bytes through a
+worker-owned Unix socket; the privileged worker alone holds the FIFO connected
+to Firecracker stdin. Rebuild the base image and recreate existing VMs to apply
+this access model to disks that were made before this change.
 
 ### Quota
 

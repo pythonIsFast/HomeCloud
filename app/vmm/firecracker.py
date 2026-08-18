@@ -18,6 +18,8 @@ import socket
 import subprocess
 import time
 
+from . import console as serial_console
+
 # Kernel command line. Notable parts:
 #   ip=...        static address for the guest, so no DHCP server is needed
 #   reboot=k      a reboot inside the guest exits firecracker instead of hanging
@@ -136,11 +138,20 @@ def spawn(binary, vm_dir, config_path):
     log_path = os.path.join(vm_dir, "firecracker.log")
     open(log_path, "a", encoding="utf-8").close()
 
+    fifo_path = serial_console.input_fifo_path(vm_dir)
+    try:
+        os.mkfifo(fifo_path, 0o660)
+    except FileExistsError:
+        pass
+
+    # A read/write descriptor keeps the FIFO alive for the child. Unlike a
+    # subprocess pipe it remains usable after the worker itself restarts.
+    console_input = os.open(fifo_path, os.O_RDWR)
     console = open(os.path.join(vm_dir, "console.log"), "ab", buffering=0)
     try:
         process = subprocess.Popen(
             [binary, "--api-sock", socket_path, "--config-file", config_path],
-            stdin=subprocess.DEVNULL,
+            stdin=console_input,
             stdout=console,
             stderr=console,
             cwd=vm_dir,
@@ -150,6 +161,7 @@ def spawn(binary, vm_dir, config_path):
         )
     finally:
         console.close()
+        os.close(console_input)
 
     # Give it a moment to fail loudly (bad kernel path, tap missing, no KVM).
     time.sleep(0.4)

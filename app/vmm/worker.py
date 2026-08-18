@@ -26,7 +26,7 @@ import time
 
 from .. import audit, jobs
 from ..core import resources
-from . import firecracker, images, net
+from . import console, firecracker, images, net
 
 
 class Worker:
@@ -35,6 +35,7 @@ class Worker:
         self.poll_seconds = poll_seconds
         self.host = jobs.local_host_name()
         self.running = True
+        self.console_bridges = {}
 
     # --- setup ------------------------------------------------------------
 
@@ -166,14 +167,12 @@ class Worker:
         self.log(f"  building disk ({config.get('disk_gb', 1)} GB)")
         rootfs = os.path.join(directory, "rootfs.ext4")
         images.create_vm_disk(
-            self.app.config["VM_BASE_ROOTFS"],
-            rootfs,
-            config.get("disk_gb", 1),
-            config.get("ssh_key", ""),
+            self.app.config["VM_BASE_ROOTFS"], rootfs, config.get("disk_gb", 1)
         )
 
         net.create_tap(plan)
         pid = self._boot(row, config, plan, directory, rootfs)
+        self.ensure_console_bridge(row["id"])
 
         resources.merge_config(row["id"], {
             "tap": plan["tap"],
@@ -209,6 +208,7 @@ class Worker:
         plan = net.plan(row["id"], self.app.config["VM_SUBNET_PREFIX"])
         net.create_tap(plan)
         pid = self._boot(row, config, plan, directory, rootfs)
+        self.ensure_console_bridge(row["id"])
 
         resources.merge_config(row["id"], {"pid": pid, "last_error": None})
         resources.set_status(row["id"], "running")
@@ -221,6 +221,7 @@ class Worker:
 
         config = self.config_of(row)
         outcome = firecracker.shutdown(self.vm_dir(row["id"]), config.get("pid"))
+        self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
 
         resources.merge_config(row["id"], {"pid": None})
@@ -238,6 +239,7 @@ class Worker:
 
         config = self.config_of(row)
         firecracker.shutdown(self.vm_dir(row["id"]), config.get("pid"))
+        self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
         images.remove_vm_dir(self.vm_dir(row["id"]))
 
@@ -261,6 +263,19 @@ class Worker:
         self.log(f"  booted pid={pid} ip={plan['guest_ip']}")
         return pid
 
+    def ensure_console_bridge(self, resource_id):
+        """Make a running VM's serial input reachable by the web process."""
+        bridge = self.console_bridges.get(resource_id)
+        if bridge is None:
+            bridge = console.ConsoleBridge(self.vm_dir(resource_id))
+            self.console_bridges[resource_id] = bridge
+        bridge.start()
+
+    def stop_console_bridge(self, resource_id):
+        bridge = self.console_bridges.pop(resource_id, None)
+        if bridge is not None:
+            bridge.stop()
+
     # --- supervision ------------------------------------------------------
 
     def supervise(self):
@@ -277,9 +292,11 @@ class Worker:
 
             config = self.config_of(row)
             if firecracker.is_alive(config.get("pid")):
+                self.ensure_console_bridge(row["id"])
                 continue
 
             self.log(f"resource {row['id']}: process gone, marking stopped")
+            self.stop_console_bridge(row["id"])
             net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
             resources.merge_config(row["id"], {"pid": None})
             resources.set_status(row["id"], "stopped")

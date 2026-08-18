@@ -10,7 +10,7 @@ from flask import current_app, jsonify, request
 
 from ...auth import guards
 from ...core import resources
-from ...vmm import firecracker
+from ...vmm import console, firecracker
 from . import bp, flavors, service
 
 
@@ -60,7 +60,6 @@ def create_instance():
             user,
             data.get("name"),
             data.get("flavor"),
-            data.get("ssh_key"),
         )
         return jsonify({"instance": service.public_view(row)}), 201
 
@@ -118,3 +117,29 @@ def instance_console(resource_id):
 
     vm_dir = os.path.join(current_app.config["VM_DIR"], str(resource_id))
     return jsonify({"console": firecracker.tail_console(vm_dir)})
+
+
+@bp.post("/api/instances/<int:resource_id>/console/input")
+@guards.login_required
+def instance_console_input(resource_id):
+    """Forward a small terminal keystroke batch to the privileged worker."""
+    user = guards.current_user()
+    row = resources.get(user["id"], resource_id)
+    if row is None or row["service_type"] != service.SERVICE_TYPE:
+        return jsonify({"error": "instance not found"}), 404
+    if row["status"] != "running":
+        return jsonify({"error": "terminal is available only while running"}), 409
+
+    value = _payload().get("input", "")
+    if not isinstance(value, str):
+        return jsonify({"error": "terminal input must be text"}), 400
+    data = value.encode("utf-8")
+    if not data or len(data) > console.MAX_INPUT_BYTES:
+        return jsonify({"error": "terminal input must contain 1-4096 bytes"}), 400
+
+    vm_dir = os.path.join(current_app.config["VM_DIR"], str(resource_id))
+    try:
+        console.send_input(vm_dir, data)
+    except console.ConsoleError as error:
+        return jsonify({"error": str(error)}), 409
+    return jsonify({"ok": True})

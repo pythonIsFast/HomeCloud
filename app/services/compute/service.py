@@ -16,12 +16,6 @@ SERVICE_TYPE = "compute"
 # Instance names end up in a tap device name and a directory, so keep them tame.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
 
-# Accepted SSH public key formats. ed25519 first because it is the sane default.
-SSH_KEY_RE = re.compile(
-    r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com)"
-    r"\s+[A-Za-z0-9+/=]{40,}(\s+\S+)?$"
-)
-
 # Which action is allowed in which state, and what the row moves to while the
 # worker is busy. Keeping this in one table is what stops the "start a deleting
 # VM" class of bug -- routes never compare statuses by hand.
@@ -48,8 +42,8 @@ class ComputeError(Exception):
 def public_view(row, include_secrets=False):
     """Registry row -> API shape.
 
-    The SSH public key is not secret, but the internal file paths and the pid
-    are noise for clients, so they only appear for admins/debugging.
+    Internal paths and the pid are noise for clients, so they only appear for
+    admins/debugging.
     """
     data = resources.to_dict(row)
     config = data.pop("config", {}) or {}
@@ -65,7 +59,6 @@ def public_view(row, include_secrets=False):
         "memory_mb": config.get("memory_mb"),
         "disk_gb": config.get("disk_gb"),
         "ip": config.get("ip"),
-        "ssh": f"ssh root@{config['ip']}" if config.get("ip") else None,
         "last_error": config.get("last_error"),
     }
     if include_secrets:
@@ -88,32 +81,12 @@ def validate_name(name):
     return name
 
 
-def validate_ssh_key(key):
-    key = (key or "").strip()
-    if not key:
-        raise ComputeError(
-            "an SSH public key is required -- it is the only way into the instance"
-        )
-    if len(key) > 4096:
-        raise ComputeError("SSH key looks implausibly long")
-    if not SSH_KEY_RE.match(key):
-        raise ComputeError(
-            "that does not look like an SSH public key "
-            "(expected e.g. 'ssh-ed25519 AAAA... comment')"
-        )
-    if key.startswith(("-----BEGIN", "ssh-rsa PRIVATE")):
-        raise ComputeError("that is a private key -- paste the .pub file instead")
-    return key
-
-
 # --- create -----------------------------------------------------------------
 
 
-def create_instance(user, name, flavor_name, ssh_key):
+def create_instance(user, name, flavor_name):
     """Validate, reserve quota, write the registry row, queue the create job."""
     name = validate_name(name)
-    ssh_key = validate_ssh_key(ssh_key)
-
     flavor = flavors.get(flavor_name or flavors.DEFAULT_FLAVOR)
     if flavor is None:
         raise ComputeError(f"unknown flavor: {flavor_name!r}")
@@ -136,7 +109,6 @@ def create_instance(user, name, flavor_name, ssh_key):
             "vcpu": flavor["vcpu"],
             "memory_mb": flavor["memory_mb"],
             "disk_gb": flavor["disk_gb"],
-            "ssh_key": ssh_key,
             "pid": None,
             "ip": None,
         },

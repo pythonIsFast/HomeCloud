@@ -27,6 +27,7 @@
     quota: null,
     pollTimer: null,
     consoleId: null,
+    consoleTimer: null,
   };
 
   // States in which the worker is about to change something, so the view keeps
@@ -136,10 +137,9 @@
 
   function addressCell(instance) {
     if (!instance.ip) return HC.cell("");
-    // The SSH command is the useful thing here, not the bare address.
     const wrap = document.createElement("span");
     wrap.className = "mono";
-    wrap.textContent = "root@" + instance.ip;
+    wrap.textContent = instance.ip;
     return HC.cell(wrap);
   }
 
@@ -236,7 +236,6 @@
       body: {
         name: document.getElementById("vm-name").value,
         flavor: flavorSelect.value,
-        ssh_key: document.getElementById("vm-ssh-key").value,
       },
     });
 
@@ -291,6 +290,9 @@
     consoleOut.textContent = "loading ...";
     consolePanel.scrollIntoView({ block: "nearest" });
     await refreshConsole();
+    consoleOut.focus();
+    if (state.consoleTimer) window.clearInterval(state.consoleTimer);
+    state.consoleTimer = window.setInterval(refreshConsole, 1000);
   }
 
   async function refreshConsole() {
@@ -309,7 +311,50 @@
   document.getElementById("console-refresh").addEventListener("click", refreshConsole);
   document.getElementById("console-close").addEventListener("click", () => {
     state.consoleId = null;
+    if (state.consoleTimer) window.clearInterval(state.consoleTimer);
+    state.consoleTimer = null;
     consolePanel.classList.add("hidden");
+  });
+
+  function keyToTerminalInput(event) {
+    if (event.ctrlKey && event.key.length === 1) {
+      const code = event.key.toUpperCase().charCodeAt(0);
+      return code >= 64 && code <= 95 ? String.fromCharCode(code - 64) : null;
+    }
+    const special = {
+      Enter: "\r", Backspace: "\u007f", Tab: "\t", Escape: "\u001b",
+      ArrowUp: "\u001b[A", ArrowDown: "\u001b[B",
+      ArrowRight: "\u001b[C", ArrowLeft: "\u001b[D",
+    };
+    if (special[event.key]) return special[event.key];
+    return event.key.length === 1 && !event.metaKey && !event.altKey ? event.key : null;
+  }
+
+  consoleOut.addEventListener("keydown", async (event) => {
+    const input = keyToTerminalInput(event);
+    if (!state.consoleId || !input) return;
+    event.preventDefault();
+    const result = await HC.api(
+      "/compute/api/instances/" + state.consoleId + "/console/input",
+      { method: "POST", body: { input } }
+    );
+    if (!result.ok) {
+      HC.toast("Terminal input failed", result.data.error || "HTTP " + result.status, "error");
+    }
+  });
+
+  consoleOut.addEventListener("paste", async (event) => {
+    if (!state.consoleId) return;
+    const input = event.clipboardData.getData("text");
+    if (!input) return;
+    event.preventDefault();
+    const result = await HC.api(
+      "/compute/api/instances/" + state.consoleId + "/console/input",
+      { method: "POST", body: { input } }
+    );
+    if (!result.ok) {
+      HC.toast("Terminal paste failed", result.data.error || "HTTP " + result.status, "error");
+    }
   });
 
   /* --- registration with the shell --------------------------------------- */

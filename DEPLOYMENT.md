@@ -153,6 +153,15 @@ runuser -u homecloud -- .venv/bin/flask --app app compute-build-image
 runuser -u homecloud -- .venv/bin/flask --app app show-config
 ```
 
+### Terminal-only instance access
+
+HomeCloud does not accept SSH public keys. Its base image masks the guest's SSH
+units and logs root in on the serial console; the authenticated web UI is the
+only supported way to enter an instance. After upgrading to this version,
+rebuild the base image with the first command above. It affects newly created
+instances only; delete and recreate any older VM that still has an SSH key or
+an older disk image.
+
 Pin and checksum these artifacts before a long-lived production deployment.
 The Firecracker project documents its current release download and CI-artifact
 workflow in its [getting-started guide](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md).

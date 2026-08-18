@@ -11,6 +11,7 @@ Split of responsibility:
     firecracker.py  config file, process spawn, Unix-socket API client
     worker.py       the job loop and process supervision
 
-The web application talks to this package exclusively through the ``jobs``
-table -- it never imports anything from here.
+The web application talks to this package through the ``jobs`` table. The only
+exception is ``console.send_input``: it is a constrained Unix-socket client for
+the authenticated serial terminal and cannot perform host operations.
 """

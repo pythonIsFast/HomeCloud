@@ -7,7 +7,7 @@ Two jobs:
      ``flask --app app compute-build-image``.
 
   2. create_vm_disk() gives one VM its own copy of that base, resized to the
-     requested size, with the owner's SSH key written in.
+     requested size. Access happens through the authenticated web terminal.
 
 Notably none of this needs root:
 
@@ -15,10 +15,7 @@ Notably none of this needs root:
     mounting anything.
   * ``cp --sparse=always`` copies the base image cheaply -- a 20 GB image only
     occupies the blocks actually used.
-  * ``debugfs -w`` writes a file into an ext4 image without mounting it, so we
-    never touch loop devices and can never leak a mount.
-
-All three are part of e2fsprogs / squashfs-tools / coreutils, i.e. base system
+All tools are part of e2fsprogs / squashfs-tools / coreutils, i.e. base system
 tools rather than Python packages.
 """
 
@@ -32,7 +29,7 @@ import tempfile
 # resolver is written into the base image instead.
 GUEST_NAMESERVERS = ("1.1.1.1", "9.9.9.9")
 
-REQUIRED_TOOLS = ("unsquashfs", "mke2fs", "resize2fs", "debugfs")
+REQUIRED_TOOLS = ("unsquashfs", "mke2fs", "resize2fs")
 
 
 class ImageError(Exception):
@@ -83,14 +80,25 @@ def build_base_image(squashfs_path, output_path, size_mb=1024, log=print):
         log(f"unpacking {os.path.basename(squashfs_path)} ...")
         _run(["unsquashfs", "-quiet", "-no-xattrs", "-dest", tree, squashfs_path])
 
-        # Prepare the places we later write into per VM. Doing it here means the
-        # per-VM step only has to write a file, never create directories.
-        ssh_dir = os.path.join(tree, "root", ".ssh")
-        os.makedirs(ssh_dir, exist_ok=True)
-        os.chmod(ssh_dir, 0o700)
-        with open(os.path.join(ssh_dir, "authorized_keys"), "w", encoding="ascii") as f:
-            f.write("")  # placeholder, replaced per VM
-        os.chmod(os.path.join(ssh_dir, "authorized_keys"), 0o600)
+        # Each VM is entered through the authenticated HomeCloud web terminal,
+        # not through an operator-supplied SSH key. The serial getty is only
+        # reachable via the worker's per-VM local socket.
+        getty_dir = os.path.join(tree, "etc", "systemd", "system",
+                                 "serial-getty@ttyS0.service.d")
+        os.makedirs(getty_dir, exist_ok=True)
+        with open(os.path.join(getty_dir, "autologin.conf"), "w", encoding="ascii") as f:
+            f.write("[Service]\nExecStart=\n"
+                    "ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM\n")
+
+        # HomeCloud exposes the root session only through the authenticated web
+        # terminal. Mask OpenSSH in the guest so a previously supplied key is
+        # never an alternate way into a newly built VM.
+        systemd_dir = os.path.join(tree, "etc", "systemd", "system")
+        for unit in ("ssh.service", "ssh.socket"):
+            unit_path = os.path.join(systemd_dir, unit)
+            if os.path.lexists(unit_path):
+                os.unlink(unit_path)
+            os.symlink("/dev/null", unit_path)
 
         etc = os.path.join(tree, "etc")
         os.makedirs(etc, exist_ok=True)
@@ -112,8 +120,8 @@ def build_base_image(squashfs_path, output_path, size_mb=1024, log=print):
     return output_path
 
 
-def create_vm_disk(base_image, target_path, disk_gb, ssh_public_key):
-    """Give one VM its disk: sparse copy of the base, grown, key injected."""
+def create_vm_disk(base_image, target_path, disk_gb):
+    """Give one VM its disk: sparse copy of the base, then grow it."""
     require_tools()
     if not os.path.exists(base_image):
         raise ImageError(
@@ -133,38 +141,7 @@ def create_vm_disk(base_image, target_path, disk_gb, ssh_public_key):
     _run(["e2fsck", "-fp", target_path], check=False)  # resize2fs insists on a check
     _run(["resize2fs", target_path])
 
-    if ssh_public_key:
-        inject_ssh_key(target_path, ssh_public_key)
-
     return target_path
-
-
-def inject_ssh_key(image_path, ssh_public_key):
-    """Write authorized_keys into an unmounted ext4 image via debugfs."""
-    key = ssh_public_key.strip() + "\n"
-
-    with tempfile.NamedTemporaryFile("w", suffix=".pub", delete=False) as handle:
-        handle.write(key)
-        source = handle.name
-
-    try:
-        # rm first: debugfs "write" refuses to overwrite an existing file.
-        script = (
-            "rm /root/.ssh/authorized_keys\n"
-            f"write {source} /root/.ssh/authorized_keys\n"
-            "sif /root/.ssh/authorized_keys mode 0100600\n"
-            "sif /root/.ssh/authorized_keys uid 0\n"
-            "sif /root/.ssh/authorized_keys gid 0\n"
-        )
-        result = _run(["debugfs", "-w", "-f", "/dev/stdin", image_path],
-                      check=False, stdin_text=script)
-        combined = result.stdout + result.stderr
-        # debugfs reports most problems on stdout with a zero exit code, so the
-        # output has to be inspected rather than the return code.
-        if "File not found" in combined and "write" in combined:
-            raise ImageError(f"could not write SSH key into image: {combined[:400]}")
-    finally:
-        os.unlink(source)
 
 
 def remove_vm_dir(vm_dir):
