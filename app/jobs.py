@@ -130,6 +130,15 @@ def pending_for_resource(resource_id):
 
 def latest_update():
     """Return the most recent platform-update job, if one exists."""
+    # Older workers marked the job done only after starting the updater. The
+    # updater then restarted that worker, leaving the row stuck in ``running``.
+    # Current workers finish before the restart; recover only this legacy job
+    # shape so it cannot block the admin UI forever or be retried.
+    db.modify(
+        "UPDATE jobs SET status = 'done', error = NULL, finished_at = datetime('now')"
+        " WHERE action = 'update' AND status = 'running'"
+        " AND claimed_at < datetime('now', '-2 minutes')"
+    )
     return db.query(
         "SELECT * FROM jobs WHERE action = 'update' ORDER BY id DESC LIMIT 1",
         one=True,

@@ -71,6 +71,19 @@
       return;
     }
     renderUpdateStatus(result.data);
+    scheduleUpdateRefresh(result.data);
+  }
+
+  let updateTimer = null;
+  function scheduleUpdateRefresh(data) {
+    if (updateTimer) window.clearTimeout(updateTimer);
+    const job = data.job;
+    if (job && ["queued", "running"].includes(job.status)) {
+      updateTimer = window.setTimeout(async () => {
+        updateTimer = null;
+        await loadUpdateStatus();
+      }, 5000);
+    }
   }
 
   updateCheck.addEventListener("click", async () => {
