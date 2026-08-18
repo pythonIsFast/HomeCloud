@@ -142,6 +142,7 @@ User=root
 WorkingDirectory=${PROJECT_DIR}
 EnvironmentFile=${ENV_FILE}
 ExecStart=${PROJECT_DIR}/update.sh
+TimeoutStartSec=infinity
 EOF
 
 cat > /etc/nginx/sites-available/homecloud <<'EOF'

@@ -16,6 +16,48 @@ fi
 
 PROJECT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${PROJECT_DIR}/.venv"
+UPDATE_BRANCH="${HOMECLOUD_UPDATE_BRANCH:-main}"
+UPDATE_STATUS_FILE="${HOMECLOUD_UPDATE_STATUS_FILE:-/var/lib/homecloud/update.status}"
+UPDATE_STATUS_TMP="${UPDATE_STATUS_FILE}.$$"
+UPDATE_STATE=running
+UPDATE_MESSAGE="Starting the platform update"
+UPDATE_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+UPDATE_FINISHED_AT=
+
+write_update_status() {
+  install -d -m 0755 "$(dirname -- "${UPDATE_STATUS_FILE}")"
+  printf '%s\n' \
+    "state=${UPDATE_STATE}" \
+    "message=${UPDATE_MESSAGE}" \
+    "started_at=${UPDATE_STARTED_AT}" \
+    "finished_at=${UPDATE_FINISHED_AT}" \
+    "job_id=" > "${UPDATE_STATUS_TMP}"
+  chmod 0644 "${UPDATE_STATUS_TMP}"
+  mv -f "${UPDATE_STATUS_TMP}" "${UPDATE_STATUS_FILE}"
+}
+
+set_update_step() {
+  UPDATE_MESSAGE="$1"
+  write_update_status
+}
+
+finish_update_status() {
+  result=$?
+  trap - EXIT
+  UPDATE_FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ "${result}" -eq 0 ]; then
+    UPDATE_STATE=succeeded
+    UPDATE_MESSAGE="The platform update completed successfully"
+  else
+    UPDATE_STATE=failed
+    UPDATE_MESSAGE="The platform update failed while: ${UPDATE_MESSAGE}"
+  fi
+  write_update_status
+  exit "${result}"
+}
+
+write_update_status
+trap finish_update_status EXIT
 
 if [ ! -x "${VENV}/bin/pip" ] || [ ! -x "${VENV}/bin/flask" ]; then
   echo "Virtual environment missing at ${VENV}; follow DEPLOYMENT.md first." >&2
@@ -28,21 +70,26 @@ fi
 
 cd "${PROJECT_DIR}"
 
+set_update_step "Pulling the latest source from Git"
 echo "==> Updating source"
-git pull --rebase
+git pull --rebase origin "${UPDATE_BRANCH}"
 
 if ! command -v ssh >/dev/null 2>&1; then
+  set_update_step "Installing the OpenSSH client"
   echo "==> Installing the OpenSSH client for Serveo bridges"
   apt-get update
   apt-get install -y openssh-client
 fi
 
+set_update_step "Updating Python dependencies"
 echo "==> Updating Python dependencies"
 PIP_DISABLE_PIP_VERSION_CHECK=1 "${VENV}/bin/pip" install -r requirements.txt
 
+set_update_step "Rebuilding the base image for new instances"
 echo "==> Rebuilding the base image for new instances"
 runuser -u homecloud -- "${VENV}/bin/flask" --app app compute-build-image
 
+set_update_step "Installing service configuration"
 echo "==> Installing a safe worker-restart override"
 install -d -m 0755 /etc/systemd/system/homecloud-vmm.service.d
 cat > /etc/systemd/system/homecloud-vmm.service.d/worker.conf <<'EOF'
@@ -64,6 +111,7 @@ User=root
 WorkingDirectory=${PROJECT_DIR}
 EnvironmentFile=/etc/homecloud/homecloud.env
 ExecStart=${PROJECT_DIR}/update.sh
+TimeoutStartSec=infinity
 EOF
 
 echo "==> Enabling concurrent terminal streams"
@@ -82,6 +130,7 @@ proxy_cache off;
 proxy_read_timeout 1h;
 EOF
 
+set_update_step "Restarting HomeCloud services"
 echo "==> Restarting HomeCloud services"
 systemctl daemon-reload
 systemctl restart homecloud-web.service

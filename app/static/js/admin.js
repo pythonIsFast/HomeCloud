@@ -37,28 +37,70 @@
 
   adminTabs.forEach((tab) => tab.addEventListener("click", () => selectAdminTab(tab.dataset.adminTab)));
 
+  let updateTimer = null;
+  let updatePolling = false;
+
+  function scheduleUpdateRefresh(delay) {
+    if (updateTimer) window.clearTimeout(updateTimer);
+    if (!updatePolling) return;
+    updateTimer = window.setTimeout(async () => {
+      updateTimer = null;
+      await loadUpdateStatus();
+    }, delay || 5000);
+  }
+
   function renderUpdateStatus(data) {
     const check = data.check || {};
     const job = data.job;
-    updateRun.disabled = !check.ok || !check.update_available ||
+    const runtime = data.runtime || { state: "idle" };
+    const running = ["starting", "running"].includes(runtime.state) ||
       Boolean(job && ["queued", "running"].includes(job.status));
+    updateRun.disabled = running || !check.ok || !check.update_available;
 
-    if (!check.ok) {
-      updateStatus.textContent = "Update check failed";
-      updateDetail.textContent = check.error || "Could not inspect the Git origin.";
-      return;
-    }
-    if (job && ["queued", "running"].includes(job.status)) {
+    if (running) {
+      updatePolling = true;
       updateStatus.textContent = "Update in progress";
-      updateDetail.textContent = "The worker has accepted update job #" + job.id + ". Services may restart briefly.";
+      updateDetail.textContent = runtime.message ||
+        (job && job.id
+          ? "The worker has accepted update job #" + job.id + ". Services may restart briefly."
+          : "The update service is starting. Services may restart briefly.");
+      scheduleUpdateRefresh();
       return;
     }
+
+    // A successful Git comparison is newer evidence than a historical queue
+    // failure (including the old synchronous systemctl timeout bug).
+    if (check.ok && !check.update_available) {
+      updatePolling = false;
+      updateStatus.textContent = "HomeCloud is up to date";
+      updateDetail.textContent = "Branch " + check.branch + " · current " + check.current.slice(0, 8) +
+        " · remote " + check.latest.slice(0, 8);
+      return;
+    }
+
+    if (runtime.state === "failed") {
+      updatePolling = false;
+      updateStatus.textContent = "Last update failed";
+      updateDetail.textContent = runtime.message || "The update script reported an error.";
+      return;
+    }
+
     if (job && job.status === "failed") {
+      updatePolling = false;
       updateStatus.textContent = "Last update failed";
       updateDetail.textContent = job.error || "The update service reported an error.";
       return;
     }
-    updateStatus.textContent = check.update_available ? "Update available" : "HomeCloud is up to date";
+
+    if (!check.ok) {
+      updatePolling = false;
+      updateStatus.textContent = "Update check failed";
+      updateDetail.textContent = check.error || "Could not inspect the Git origin.";
+      return;
+    }
+
+    updatePolling = false;
+    updateStatus.textContent = "Update available";
     updateDetail.textContent = "Branch " + check.branch + " · current " + check.current.slice(0, 8) +
       " · remote " + check.latest.slice(0, 8);
   }
@@ -66,24 +108,18 @@
   async function loadUpdateStatus() {
     const result = await HC.api("/api/admin/update");
     if (!result.ok) {
-      updateStatus.textContent = "Update check failed";
-      updateDetail.textContent = result.data.error || "HTTP " + result.status;
+      updateRun.disabled = true;
+      if (updatePolling) {
+        updateStatus.textContent = "HomeCloud is restarting";
+        updateDetail.textContent = "Waiting for the web service to become available again.";
+        scheduleUpdateRefresh();
+      } else {
+        updateStatus.textContent = "Update check failed";
+        updateDetail.textContent = result.data.error || "HTTP " + result.status;
+      }
       return;
     }
     renderUpdateStatus(result.data);
-    scheduleUpdateRefresh(result.data);
-  }
-
-  let updateTimer = null;
-  function scheduleUpdateRefresh(data) {
-    if (updateTimer) window.clearTimeout(updateTimer);
-    const job = data.job;
-    if (job && ["queued", "running"].includes(job.status)) {
-      updateTimer = window.setTimeout(async () => {
-        updateTimer = null;
-        await loadUpdateStatus();
-      }, 5000);
-    }
   }
 
   updateCheck.addEventListener("click", async () => {
@@ -99,8 +135,13 @@
     HC.setBusy(updateRun, false);
     if (!result.ok) {
       HC.toast("Update could not be queued", result.data.error || "HTTP " + result.status, "error");
+      await loadUpdateStatus();
       return;
     }
+    updatePolling = true;
+    updateStatus.textContent = "Update queued";
+    updateDetail.textContent = "Waiting for the privileged worker to start the update service.";
+    updateRun.disabled = true;
     HC.toast("Update queued", "The privileged worker will apply it shortly", "success");
     await loadUpdateStatus();
   });

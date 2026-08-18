@@ -167,13 +167,19 @@ def admin_clear_override(user_id):
 def admin_update_status():
     """Check the configured origin and report the latest update job."""
     job = jobs.latest_update()
-    return jsonify({"check": update.check(), "job": dict(job) if job else None})
+    return jsonify({
+        "check": update.check(),
+        "job": dict(job) if job else None,
+        "runtime": update.runtime_status(),
+    })
 
 
 @bp.post("/api/admin/update")
 @guards.admin_required
 def admin_request_update():
     """Queue an update for the privileged worker."""
+    if update.runtime_status().get("state") in ("starting", "running"):
+        return jsonify({"error": "a platform update is already running"}), 409
     user = guards.current_user()
     job, created = update.request(user["id"])
     if created:

@@ -45,6 +45,16 @@ not modified; recreate pre-terminal VMs to remove legacy SSH access and use the
 browser terminal. It also enables threaded gunicorn workers and disables nginx
 buffering for persistent terminal streams.
 
+Administrators can run the same updater from **Administration → Updates**. The
+page follows progress across web-service restarts using
+`/var/lib/homecloud/update.status`. If an update fails, inspect the full systemd
+log with:
+
+    sudo journalctl -u homecloud-update.service -n 100 --no-pager
+
+An installation made before asynchronous updates were added must run the
+command-line updater once before the repaired GUI workflow is available.
+
 Private raw ext4 image uploads default to 2048 MiB. To choose another limit,
 set `HOMECLOUD_IMAGE_UPLOAD_MAX_MB` in `/etc/homecloud/homecloud.env` and set
 the matching `client_max_body_size` in the HomeCloud nginx configuration.

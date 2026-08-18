@@ -199,7 +199,9 @@ base image for future instances, refreshes systemd/nginx configuration, and
 restarts HomeCloud. Existing VM disks are preserved.
 
 Administrators can also use **Administration → Updates** to check `origin/main`
-and queue an update through the privileged update service.
+and queue an update through the privileged update service. The page shows the
+active update phase, survives the brief web-service restart, and reports the
+durable result written to `/var/lib/homecloud/update.status`.
 
 ## Configuration
 

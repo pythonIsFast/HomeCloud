@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 
-from .. import audit, jobs
+from .. import audit, jobs, update
 from ..core import resources
 from . import console, firecracker, images, net, serveo
 
@@ -401,16 +401,25 @@ class Worker:
     def do_update(self, job):
         """Start the fixed root-owned updater outside this worker service."""
         self.log(f"job {job['id']}: starting platform update service")
-        # The updater restarts this worker. Mark the queue item done first so
-        # the restarted worker cannot reclaim it after a stale-job timeout.
-        jobs.finish(job["id"])
+        update.write_runtime_status(
+            "starting", "Waiting for the platform update service", job["id"]
+        )
+        try:
+            # A oneshot unit remains in "activating" until update.sh exits.
+            # --no-block confirms only that systemd accepted the request, so a
+            # slow image rebuild cannot turn into a false worker timeout.
+            subprocess.run(
+                ["systemctl", "--no-block", "start", "homecloud-update.service"],
+                check=True,
+                timeout=10,
+            )
+        except Exception as error:
+            update.write_runtime_status(
+                "failed", f"Could not start the update service: {error}", job["id"]
+            )
+            raise
         audit.log_action(job["user_id"], "platform.update_started", None,
                          {"job_id": job["id"]})
-        subprocess.run(
-            ["systemctl", "start", "homecloud-update.service"],
-            check=True,
-            timeout=30,
-        )
 
     def _boot(self, row, config, plan, directory, rootfs):
         vm_config = firecracker.build_config(
