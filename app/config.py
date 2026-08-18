@@ -52,6 +52,9 @@ def build_config(instance_path):
         "JWT_COOKIE_SECURE": os.environ.get("HOMECLOUD_COOKIE_SECURE", "0") == "1",
         # Allow self-service registration. Turn off after creating your accounts.
         "ALLOW_REGISTRATION": os.environ.get("HOMECLOUD_ALLOW_REGISTRATION", "1") == "1",
+        # Uploaded guest root filesystems are untrusted input. Flask rejects a
+        # request before buffering it beyond this installation-wide cap.
+        "MAX_CONTENT_LENGTH": int(os.environ.get("HOMECLOUD_IMAGE_UPLOAD_MAX_MB", 2048)) * 1024 * 1024,
 
         # --- compute service / Firecracker -------------------------------
         # Binaries and images live under instance/ because they are host state,

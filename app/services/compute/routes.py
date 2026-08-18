@@ -144,3 +144,13 @@ def instance_console_input(resource_id):
     except console.ConsoleError as error:
         return jsonify({"error": str(error)}), 409
     return jsonify({"ok": True})
+
+
+@bp.put("/api/instances/<int:resource_id>/firewall")
+@guards.login_required
+def instance_firewall(resource_id):
+    user = guards.current_user()
+    rules = _payload().get("rules", [])
+    return _handle(lambda: jsonify({"instance": service.public_view(
+        service.update_firewall(user, resource_id, rules)
+    )}))

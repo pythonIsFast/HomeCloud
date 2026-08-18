@@ -172,6 +172,7 @@ class Worker:
         )
 
         net.create_tap(plan)
+        net.apply_firewall(row["id"], plan, config.get("firewall", []))
         pid = self._boot(row, config, plan, directory, rootfs)
         self.ensure_console_bridge(row["id"])
 
@@ -209,6 +210,7 @@ class Worker:
 
         plan = net.plan(row["id"], self.app.config["VM_SUBNET_PREFIX"])
         net.create_tap(plan)
+        net.apply_firewall(row["id"], plan, config.get("firewall", []))
         pid = self._boot(row, config, plan, directory, rootfs)
         self.ensure_console_bridge(row["id"])
 
@@ -225,6 +227,7 @@ class Worker:
         outcome = firecracker.shutdown(self.vm_dir(row["id"]), config.get("pid"))
         self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
+        net.delete_firewall(row["id"], net.plan(row["id"], self.app.config["VM_SUBNET_PREFIX"]))
 
         resources.merge_config(row["id"], {"pid": None, "usage": None})
         resources.set_status(row["id"], "stopped")
@@ -243,11 +246,23 @@ class Worker:
         firecracker.shutdown(self.vm_dir(row["id"]), config.get("pid"))
         self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
+        net.delete_firewall(row["id"], net.plan(row["id"], self.app.config["VM_SUBNET_PREFIX"]))
         images.remove_vm_dir(self.vm_dir(row["id"]))
 
         resources.merge_config(row["id"], {"pid": None, "rootfs": None, "usage": None})
         resources.set_status(row["id"], "deleted")
         audit.log_action(job["user_id"], "compute.delete", row["id"])
+
+    def do_firewall(self, job):
+        row = resources.get_any(job["resource_id"])
+        if row is None:
+            return
+        config = self.config_of(row)
+        if row["status"] == "running":
+            plan = net.plan(row["id"], self.app.config["VM_SUBNET_PREFIX"])
+            net.apply_firewall(row["id"], plan, config.get("firewall", []))
+        audit.log_action(job["user_id"], "compute.firewall", row["id"],
+                         {"rules": config.get("firewall", [])})
 
     def _boot(self, row, config, plan, directory, rootfs):
         vm_config = firecracker.build_config(

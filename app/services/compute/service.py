@@ -6,6 +6,7 @@ the actual work. Nothing in this file touches KVM, tap devices or images.
 """
 
 import re
+import ipaddress
 
 from ... import audit, jobs, limits
 from ...core import resources
@@ -61,6 +62,7 @@ def public_view(row, include_secrets=False):
         "ip": config.get("ip"),
         "usage": config.get("usage"),
         "last_error": config.get("last_error"),
+        "firewall": config.get("firewall", []),
     }
     if include_secrets:
         view["internal"] = {
@@ -80,6 +82,25 @@ def validate_name(name):
             "and may not start or end with a dash"
         )
     return name
+
+
+def validate_firewall(rules):
+    """Validate untrusted firewall input without importing privileged VMM code."""
+    if not isinstance(rules, list) or len(rules) > 32:
+        raise ComputeError("firewall must contain at most 32 rules")
+    normalized = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("protocol") not in ("tcp", "udp"):
+            raise ComputeError("firewall protocol must be tcp or udp")
+        try:
+            port = int(rule.get("port"))
+            source = str(ipaddress.IPv4Network(rule.get("source", "0.0.0.0/0"), strict=False))
+        except (TypeError, ValueError) as error:
+            raise ComputeError("firewall source must be an IPv4 CIDR and port must be numeric") from error
+        if not 1 <= port <= 65535:
+            raise ComputeError("firewall port must be 1-65535")
+        normalized.append({"protocol": rule["protocol"], "port": port, "source": source})
+    return normalized
 
 
 # --- create -----------------------------------------------------------------
@@ -112,6 +133,7 @@ def create_instance(user, name, flavor_name):
             "disk_gb": flavor["disk_gb"],
             "pid": None,
             "ip": None,
+            "firewall": [],
         },
         status="pending",
     )
@@ -120,6 +142,21 @@ def create_instance(user, name, flavor_name):
     audit.log_action(user["id"], "compute.requested", resource_id,
                      {"name": name, "flavor": flavor["name"]})
 
+    return resources.get(user["id"], resource_id)
+
+
+def update_firewall(user, resource_id, rules):
+    row = resources.get(user["id"], resource_id)
+    if row is None or row["service_type"] != SERVICE_TYPE:
+        raise ComputeError("instance not found", status=404)
+    if row["status"] == "deleted":
+        raise ComputeError("instance is deleted", status=409)
+    rules = validate_firewall(rules)
+    config = resources.to_dict(row)["config"]
+    config["firewall"] = rules
+    resources.set_config(resource_id, config)
+    jobs.enqueue("firewall", resource_id=resource_id, user_id=user["id"])
+    audit.log_action(user["id"], "compute.firewall_requested", resource_id, {"rules": rules})
     return resources.get(user["id"], resource_id)
 
 

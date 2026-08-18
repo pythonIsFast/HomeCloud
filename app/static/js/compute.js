@@ -27,6 +27,7 @@
     quota: null,
     pollTimer: null,
     detailId: null,
+    detailInstance: null,
     detailTimer: null,
     consoleOffset: 0,
     consoleTimer: null,
@@ -335,6 +336,15 @@
     }
     document.getElementById("vm-detail-status").replaceChildren(HC.status(instance.status));
     document.getElementById("vm-detail-ip").textContent = instance.ip || "no network address yet";
+    const firewallRules = document.getElementById("vm-firewall-rules");
+    firewallRules.replaceChildren(...(instance.firewall || []).map((rule, index) => {
+      const button = document.createElement("button");
+      button.className = "btn btn-sm btn-quiet";
+      button.type = "button";
+      button.textContent = rule.protocol + " " + rule.port + " from " + rule.source + " ×";
+      button.addEventListener("click", () => saveFirewall(instance, (instance.firewall || []).filter((_, i) => i !== index)));
+      return button;
+    }));
 
     detailActions.replaceChildren();
     if (BUSY.includes(instance.status)) {
@@ -372,6 +382,7 @@
     }
     const instance = result.data.instance;
     state.detailId = instance.id;
+    state.detailInstance = instance;
     renderDetail(instance);
     scheduleDetailPoll(instance);
     if (instance.status === "running") {
@@ -423,6 +434,30 @@
     queueTerminalInput(input, pasted ? "paste" : undefined, pasted ? 0 : undefined);
   });
 
+  async function saveFirewall(instance, rules) {
+    const result = await HC.api("/compute/api/instances/" + instance.id + "/firewall", {
+      method: "PUT", body: { rules },
+    });
+    if (!result.ok) {
+      HC.toast("Firewall update failed", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    HC.toast("Firewall update queued", instance.name, "success");
+    await loadDetail(instance.id);
+  }
+
+  document.getElementById("vm-firewall-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const instance = state.detailInstance;
+    if (!instance) return;
+    const rule = {
+      protocol: document.getElementById("firewall-protocol").value,
+      port: Number(document.getElementById("firewall-port").value),
+      source: document.getElementById("firewall-source").value,
+    };
+    saveFirewall(instance, (instance.firewall || []).concat(rule));
+  });
+
   function queueTerminalInput(input, label, delay) {
     state.pendingTerminalInput += input;
     if (state.terminalInputTimer || state.terminalInputSending) return;
@@ -460,6 +495,7 @@
     const match = window.location.hash.match(/^#vm\/(\d+)$/);
     if (!match) {
       state.detailId = null;
+      state.detailInstance = null;
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";
       if (state.terminalInputTimer) window.clearTimeout(state.terminalInputTimer);

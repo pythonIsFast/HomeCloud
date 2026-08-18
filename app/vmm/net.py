@@ -130,6 +130,57 @@ def create_tap(net_plan):
     _run(["ip", "link", "set", "dev", net_plan["tap"], "up"])
 
 
+def validate_firewall(rules):
+    """Normalize a small allow-list of TCP/UDP ingress rules."""
+    if not isinstance(rules, list) or len(rules) > 32:
+        raise NetworkError("firewall must contain at most 32 rules")
+    normalized = []
+    for rule in rules:
+        if not isinstance(rule, dict) or rule.get("protocol") not in ("tcp", "udp"):
+            raise NetworkError("firewall protocol must be tcp or udp")
+        try:
+            port = int(rule.get("port"))
+            source = str(ipaddress.IPv4Network(rule.get("source", "0.0.0.0/0"), strict=False))
+        except (TypeError, ValueError):
+            raise NetworkError("firewall source must be an IPv4 CIDR and port must be numeric")
+        if not 1 <= port <= 65535:
+            raise NetworkError("firewall port must be 1-65535")
+        normalized.append({"protocol": rule["protocol"], "port": port, "source": source})
+    return normalized
+
+
+def firewall_chain(resource_id):
+    return f"HCVM{int(resource_id)}"
+
+
+def apply_firewall(resource_id, net_plan, rules):
+    """Install a per-VM default-deny ingress chain before the guest is exposed."""
+    rules = validate_firewall(rules or [])
+    chain = firewall_chain(resource_id)
+    _run(["iptables", "-N", chain], check=False)
+    _run(["iptables", "-F", chain])
+    _run(["iptables", "-A", chain, "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "ACCEPT"])
+    for rule in rules:
+        _run(["iptables", "-A", chain, "-s", rule["source"], "-p", rule["protocol"],
+              "--dport", str(rule["port"]), "-j", "ACCEPT"])
+    _run(["iptables", "-A", chain, "-j", "DROP"])
+    hook = ["-d", net_plan["guest_ip"], "-o", net_plan["tap"], "-j", chain]
+    code, _ = _run(["iptables", "-C", "FORWARD", *hook], check=False)
+    if code != 0:
+        _run(["iptables", "-I", "FORWARD", "1", *hook])
+    return rules
+
+
+def delete_firewall(resource_id, net_plan=None):
+    chain = firewall_chain(resource_id)
+    if net_plan:
+        hook = ["-d", net_plan["guest_ip"], "-o", net_plan["tap"], "-j", chain]
+        while _run(["iptables", "-D", "FORWARD", *hook], check=False)[0] == 0:
+            pass
+    _run(["iptables", "-F", chain], check=False)
+    _run(["iptables", "-X", chain], check=False)
+
+
 def delete_tap(tap):
     """Remove a tap device if it exists. Never raises."""
     _run(["ip", "link", "del", "dev", tap], check=False)

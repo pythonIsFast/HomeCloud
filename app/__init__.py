@@ -12,6 +12,7 @@ from flask import Flask
 from . import audit
 from . import config as app_config
 from . import db
+from . import security
 
 
 def create_app(test_config=None):
@@ -31,6 +32,7 @@ def create_app(test_config=None):
 
     # Database: teardown handler + "flask --app app init-db" CLI command.
     db.register(app)
+    security.register(app)
     # "flask --app app prune-audit"
     audit.register(app)
     # "flask --app app compute-build-image"

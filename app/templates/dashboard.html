@@ -195,6 +195,22 @@
         </div>
 
         <div class="panel">
+          <div class="panel-head"><h2>Firewall</h2></div>
+          <div class="panel-body">
+            <p class="field-note">Ingress is denied by default. Add TCP or UDP ports that this VM may accept.</p>
+            <form id="vm-firewall-form" autocomplete="off">
+              <div class="field-row">
+                <div class="field"><label class="field-label" for="firewall-protocol">Protocol</label><select class="select" id="firewall-protocol"><option>tcp</option><option>udp</option></select></div>
+                <div class="field"><label class="field-label" for="firewall-port">Port</label><input class="input input-num" id="firewall-port" type="number" min="1" max="65535" required></div>
+                <div class="field field-grow"><label class="field-label" for="firewall-source">Source</label><input class="input" id="firewall-source" value="0.0.0.0/0" required></div>
+                <button class="btn btn-solid" type="submit">Allow</button>
+              </div>
+            </form>
+            <div class="row-actions" id="vm-firewall-rules"></div>
+          </div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head">
             <div class="toolbar">
               <div class="find">
