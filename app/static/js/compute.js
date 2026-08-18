@@ -37,6 +37,8 @@
     detailId: null,
     detailInstance: null,
     detailFlavorDraft: null,
+    serveoPortDraft: null,
+    serveoSubdomainDraft: null,
     detailTab: "overview",
     detailTimer: null,
     consoleOffset: 0,
@@ -499,6 +501,7 @@
     document.getElementById("vm-detail-id").textContent = "#" + instance.id;
     document.getElementById("vm-detail-flavor").textContent = instance.flavor || "Custom";
     renderFlavorEditor(instance);
+    renderServeo(instance);
     document.getElementById("vm-detail-address").textContent = instance.ip || "Not assigned";
     document.getElementById("vm-detail-created").textContent = HC.formatDateTime(instance.created_at);
     const firewallRules = document.getElementById("vm-firewall-rules");
@@ -554,6 +557,46 @@
     submit.disabled = disabled;
   }
 
+  function renderServeo(instance) {
+    const tunnel = instance.serveo || {};
+    const status = tunnel.status || "stopped";
+    const labels = {
+      starting: "Starting tunnel…",
+      running: tunnel.url ? "Tunnel active" : "Tunnel active · waiting for URL",
+      stopping: "Stopping tunnel…",
+      offline: "VM offline · tunnel will return when it starts",
+      error: "Tunnel failed",
+      stopped: "Not configured",
+    };
+    document.getElementById("vm-serveo-status").textContent = labels[status] || status;
+
+    const port = document.getElementById("vm-serveo-port");
+    const subdomain = document.getElementById("vm-serveo-subdomain");
+    port.value = state.serveoPortDraft !== null ? state.serveoPortDraft : (tunnel.port || 80);
+    subdomain.value = state.serveoSubdomainDraft !== null
+      ? state.serveoSubdomainDraft : (tunnel.subdomain || "");
+
+    const busy = status === "starting" || status === "stopping";
+    const start = document.getElementById("vm-serveo-start");
+    start.disabled = instance.status !== "running" || busy;
+    port.disabled = busy;
+    subdomain.disabled = busy;
+    const stop = document.getElementById("vm-serveo-stop");
+    stop.classList.toggle("hidden", !tunnel.enabled && status !== "running" && status !== "error");
+    stop.disabled = busy;
+
+    const endpoint = document.getElementById("vm-serveo-endpoint");
+    const link = document.getElementById("vm-serveo-url");
+    endpoint.classList.toggle("hidden", !tunnel.url);
+    link.textContent = tunnel.url || "";
+    if (tunnel.url) link.href = tunnel.url;
+    else link.removeAttribute("href");
+
+    const error = document.getElementById("vm-serveo-error");
+    error.textContent = tunnel.error || "";
+    error.classList.toggle("hidden", !tunnel.error);
+  }
+
   async function createSnapshot(instance, name, button) {
     HC.setBusy(button, true);
     const result = await HC.api("/compute/api/images/snapshots", {
@@ -586,7 +629,7 @@
   }
 
   function setDetailTab(tab, updateHash) {
-    const allowed = ["overview", "terminal", "firewall", "snapshots"];
+    const allowed = ["overview", "terminal", "firewall", "public-access", "snapshots"];
     state.detailTab = allowed.includes(tab) ? tab : "overview";
     document.querySelectorAll("[data-vm-panel]").forEach((panel) => {
       panel.hidden = panel.dataset.vmPanel !== state.detailTab;
@@ -711,6 +754,56 @@
     state.detailFlavorDraft = event.target.value;
   });
 
+  document.getElementById("vm-serveo-port").addEventListener("input", (event) => {
+    state.serveoPortDraft = event.target.value;
+  });
+  document.getElementById("vm-serveo-subdomain").addEventListener("input", (event) => {
+    state.serveoSubdomainDraft = event.target.value;
+  });
+
+  document.getElementById("vm-serveo-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const instance = state.detailInstance;
+    if (!instance) return;
+    const button = document.getElementById("vm-serveo-start");
+    HC.setBusy(button, true);
+    const result = await HC.api("/compute/api/instances/" + instance.id + "/serveo", {
+      method: "PUT",
+      body: {
+        port: Number(document.getElementById("vm-serveo-port").value),
+        subdomain: document.getElementById("vm-serveo-subdomain").value.trim(),
+      },
+    });
+    HC.setBusy(button, false);
+    if (!result.ok) {
+      HC.toast("Public access failed", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    state.serveoPortDraft = null;
+    state.serveoSubdomainDraft = null;
+    HC.toast("Serveo tunnel queued", "The public URL will appear here shortly", "success");
+    await loadDetail(instance.id);
+  });
+
+  document.getElementById("vm-serveo-stop").addEventListener("click", async (event) => {
+    const instance = state.detailInstance;
+    if (!instance) return;
+    HC.setBusy(event.currentTarget, true);
+    const result = await HC.api("/compute/api/instances/" + instance.id + "/serveo", {
+      method: "DELETE",
+    });
+    HC.setBusy(event.currentTarget, false);
+    if (!result.ok) {
+      HC.toast("Could not stop public access", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    HC.toast("Serveo tunnel stopping", instance.name, "success");
+    await loadDetail(instance.id);
+    window.setTimeout(() => {
+      if (state.detailId === instance.id) loadDetail(instance.id);
+    }, 1500);
+  });
+
   function queueTerminalInput(input, label, delay) {
     state.pendingTerminalInput += input;
     if (state.terminalInputTimer || state.terminalInputSending) return;
@@ -741,12 +834,14 @@
   }
 
   function routeDetail() {
-    const match = window.location.hash.match(/^#vm\/(\d+)(?:\/(overview|terminal|firewall|snapshots))?$/);
+    const match = window.location.hash.match(/^#vm\/(\d+)(?:\/(overview|terminal|firewall|public-access|snapshots))?$/);
     if (!match) {
       state.detailId = null;
       state.detailInstance = null;
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";
+      state.serveoPortDraft = null;
+      state.serveoSubdomainDraft = null;
       if (state.terminalInputTimer) window.clearTimeout(state.terminalInputTimer);
       state.terminalInputTimer = null;
       disconnectConsoleStream();
@@ -760,6 +855,8 @@
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";
       state.detailFlavorDraft = null;
+      state.serveoPortDraft = null;
+      state.serveoSubdomainDraft = null;
     }
     loadDetail(resourceId);
   }

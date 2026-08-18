@@ -1230,6 +1230,17 @@ table.data td.right { text-align: right; }
 .section-intro h2 { font-size: var(--t-lg); }
 .section-intro p { margin-top: 3px; color: var(--fg-muted); font-size: var(--t-sm); }
 .vm-summary-panel { margin-top: 16px; }
+.public-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+}
+.public-endpoint a { overflow-wrap: anywhere; }
 .detail-list {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

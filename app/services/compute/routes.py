@@ -170,6 +170,24 @@ def change_instance_flavor(resource_id):
     )}), 202)
 
 
+@bp.put("/api/instances/<int:resource_id>/serveo")
+@guards.login_required
+def start_instance_serveo(resource_id):
+    data = _payload()
+    return _handle(lambda: jsonify({"instance": service.public_view(
+        service.start_serveo(guards.current_user(), resource_id, data.get("port"),
+                            data.get("subdomain"))
+    )}), 202)
+
+
+@bp.delete("/api/instances/<int:resource_id>/serveo")
+@guards.login_required
+def stop_instance_serveo(resource_id):
+    return _handle(lambda: jsonify({"instance": service.public_view(
+        service.stop_serveo(guards.current_user(), resource_id)
+    )}), 202)
+
+
 @bp.delete("/api/instances/<int:resource_id>")
 @guards.login_required
 def delete_instance(resource_id):

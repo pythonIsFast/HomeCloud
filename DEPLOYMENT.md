@@ -22,7 +22,8 @@ On the empty Debian 12 or Ubuntu 24.04 host:
 
 [install.sh](install.sh) installs OS packages, Firecracker, the matching
 architecture-specific kernel/rootfs, systemd services, nginx, and creates the
-base image. It generates /etc/homecloud/homecloud.env with a secret and a
+base image. It also installs the OpenSSH client used by optional host-side
+Serveo bridges. It generates /etc/homecloud/homecloud.env with a secret and a
 detected outbound interface.
 
 Open the host over HTTP, register the first account, then close registration:

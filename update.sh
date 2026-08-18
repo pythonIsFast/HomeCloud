@@ -31,6 +31,12 @@ cd "${PROJECT_DIR}"
 echo "==> Updating source"
 git pull --rebase
 
+if ! command -v ssh >/dev/null 2>&1; then
+  echo "==> Installing the OpenSSH client for Serveo bridges"
+  apt-get update
+  apt-get install -y openssh-client
+fi
+
 echo "==> Updating Python dependencies"
 PIP_DISABLE_PIP_VERSION_CHECK=1 "${VENV}/bin/pip" install -r requirements.txt
 

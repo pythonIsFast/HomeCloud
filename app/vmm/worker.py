@@ -27,7 +27,7 @@ import time
 
 from .. import audit, jobs
 from ..core import resources
-from . import console, firecracker, images, net
+from . import console, firecracker, images, net, serveo
 
 
 class Worker:
@@ -154,6 +154,45 @@ class Worker:
         except json.JSONDecodeError:
             return {}
 
+    def stop_serveo_bridge(self, row, disable=False):
+        config = self.config_of(row)
+        tunnel = dict(config.get("serveo") or {})
+        serveo.stop(tunnel.get("pid"))
+        tunnel.update({
+            "enabled": False if disable else bool(tunnel.get("enabled")),
+            "status": "stopped" if disable else "offline",
+            "pid": None,
+            "url": None,
+            "error": None,
+        })
+        resources.merge_config(row["id"], {"serveo": tunnel})
+
+    def start_serveo_bridge(self, row, user_id=None):
+        config = self.config_of(row)
+        tunnel = dict(config.get("serveo") or {})
+        if not tunnel.get("enabled"):
+            return
+        serveo.stop(tunnel.get("pid"))
+        try:
+            result = serveo.start(
+                self.vm_dir(row["id"]),
+                config.get("ip"),
+                tunnel.get("port"),
+                tunnel.get("subdomain", ""),
+            )
+        except Exception as error:
+            tunnel.update({"status": "error", "pid": None, "url": None,
+                           "error": str(error)[:600]})
+            resources.merge_config(row["id"], {"serveo": tunnel})
+            audit.log_action(user_id or row["user_id"], "compute.serveo_failed", row["id"],
+                             {"error": str(error)[:200]})
+            return
+        tunnel.update({"status": "running", "pid": result["pid"],
+                       "url": result["url"], "error": None})
+        resources.merge_config(row["id"], {"serveo": tunnel})
+        audit.log_action(user_id or row["user_id"], "compute.serveo_started", row["id"],
+                         {"port": tunnel.get("port"), "url": result["url"]})
+
     def do_create(self, job):
         row = resources.get_any(job["resource_id"])
         if row is None:
@@ -222,6 +261,9 @@ class Worker:
 
         resources.merge_config(row["id"], {"pid": pid, "usage": None, "last_error": None})
         resources.set_status(row["id"], "running")
+        refreshed = resources.get_any(row["id"])
+        if refreshed is not None:
+            self.start_serveo_bridge(refreshed, job["user_id"])
         audit.log_action(job["user_id"], "compute.start", row["id"])
 
     def do_stop(self, job):
@@ -230,6 +272,7 @@ class Worker:
             raise RuntimeError("resource no longer exists")
 
         config = self.config_of(row)
+        self.stop_serveo_bridge(row)
         outcome = firecracker.shutdown(self.vm_dir(row["id"]), config.get("pid"))
         self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
@@ -249,6 +292,7 @@ class Worker:
             return  # already gone, nothing to clean
 
         config = self.config_of(row)
+        self.stop_serveo_bridge(row, disable=True)
         firecracker.shutdown(self.vm_dir(row["id"]), config.get("pid"))
         self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
@@ -333,6 +377,26 @@ class Worker:
             resources.set_status(row["id"], "stopped")
         audit.log_action(job["user_id"], "compute.resize", row["id"],
                          {"flavor": config.get("flavor")})
+
+    def do_serveo_start(self, job):
+        row = resources.get_any(job["resource_id"])
+        if row is None:
+            return
+        if row["status"] != "running":
+            resources.merge_config(row["id"], {"serveo": {
+                **(self.config_of(row).get("serveo") or {}),
+                "status": "error", "pid": None, "url": None,
+                "error": "instance stopped before the tunnel could start",
+            }})
+            return
+        self.start_serveo_bridge(row, job["user_id"])
+
+    def do_serveo_stop(self, job):
+        row = resources.get_any(job["resource_id"])
+        if row is None:
+            return
+        self.stop_serveo_bridge(row, disable=True)
+        audit.log_action(job["user_id"], "compute.serveo_stopped", row["id"])
 
     def do_update(self, job):
         """Start the fixed root-owned updater outside this worker service."""
@@ -428,12 +492,24 @@ class Worker:
             config = self.config_of(row)
             if firecracker.is_alive(config.get("pid")):
                 self.ensure_console_bridge(row["id"])
+                tunnel = dict(config.get("serveo") or {})
+                if tunnel.get("enabled"):
+                    if serveo.is_alive(tunnel.get("pid")):
+                        url = serveo.read_url(self.vm_dir(row["id"])) or tunnel.get("url")
+                        if url != tunnel.get("url") or tunnel.get("status") != "running":
+                            tunnel.update({"status": "running", "url": url, "error": None})
+                            resources.merge_config(row["id"], {"serveo": tunnel})
+                    elif tunnel.get("status") not in ("error", "offline"):
+                        tunnel.update({"status": "error", "pid": None, "url": None,
+                                       "error": serveo.read_error(self.vm_dir(row["id"]))})
+                        resources.merge_config(row["id"], {"serveo": tunnel})
                 usage = self.sample_usage(row, config)
                 if usage is not None:
                     resources.merge_config(row["id"], {"usage": usage})
                 continue
 
             self.log(f"resource {row['id']}: process gone, marking stopped")
+            self.stop_serveo_bridge(row)
             self.stop_console_bridge(row["id"])
             self.usage_samples.pop(row["id"], None)
             net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")

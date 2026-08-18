@@ -30,7 +30,7 @@ fi
 echo "==> Installing operating-system packages"
 apt-get update
 apt-get install -y \
-  ca-certificates curl git nginx openssl \
+  ca-certificates curl git nginx openssl openssh-client \
   python3 python3-venv python3-pip \
   iproute2 iptables e2fsprogs squashfs-tools
 

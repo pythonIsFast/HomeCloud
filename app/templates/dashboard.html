@@ -455,6 +455,7 @@
           <button class="detail-tab" type="button" data-vm-tab="overview">Overview</button>
           <button class="detail-tab" type="button" data-vm-tab="terminal">Terminal</button>
           <button class="detail-tab" type="button" data-vm-tab="firewall">Firewall</button>
+          <button class="detail-tab" type="button" data-vm-tab="public-access">Public access</button>
           <button class="detail-tab" type="button" data-vm-tab="snapshots">Snapshots</button>
         </nav>
 
@@ -546,6 +547,42 @@
             <div class="panel-head"><h2>Allowed traffic</h2></div>
             <div class="panel-body" id="vm-firewall-rules"></div>
             <div class="empty hidden" id="vm-firewall-empty">No allow rules. All incoming traffic is blocked.</div>
+          </div>
+        </div>
+
+        <div class="vm-tab-panel" data-vm-panel="public-access" hidden>
+          <div class="section-intro">
+            <div><h2>Public access</h2><p>Publish one HTTP port through an anonymous Serveo tunnel.</p></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Serveo bridge</h2>
+                <p class="panel-kicker" id="vm-serveo-status">Not configured</p>
+              </div>
+              <button class="btn btn-danger hidden" id="vm-serveo-stop" type="button">Stop tunnel</button>
+            </div>
+            <div class="panel-body">
+              <form id="vm-serveo-form" class="field-row top" autocomplete="off">
+                <div class="field">
+                  <label class="field-label" for="vm-serveo-port">VM port</label>
+                  <input class="input input-num-wide" id="vm-serveo-port" type="number" min="1" max="65535" value="80" required>
+                  <p class="field-note">The service must listen on this port inside the VM.</p>
+                </div>
+                <div class="field field-grow">
+                  <label class="field-label" for="vm-serveo-subdomain">Preferred subdomain</label>
+                  <input class="input" id="vm-serveo-subdomain" placeholder="optional-name" spellcheck="false">
+                  <p class="field-note">Optional and subject to Serveo availability.</p>
+                </div>
+                <button class="btn btn-solid" id="vm-serveo-start" type="submit">Start tunnel</button>
+              </form>
+              <div class="public-endpoint hidden" id="vm-serveo-endpoint">
+                <span class="label-micro">Public URL</span>
+                <a class="mono" id="vm-serveo-url" target="_blank" rel="noopener noreferrer"></a>
+              </div>
+              <p class="field-error hidden" id="vm-serveo-error" role="alert"></p>
+              <p class="field-note">Anonymous Serveo URLs can show a browser warning. HomeCloud runs the bridge on the host; nothing is installed inside the VM.</p>
+            </div>
           </div>
         </div>
 

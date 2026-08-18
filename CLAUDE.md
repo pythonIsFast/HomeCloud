@@ -577,6 +577,17 @@ nginx also defaults to `client_max_body_size 2048m`; deployments that change
 the Flask environment limit must change the nginx limit to match. nginx request
 buffering stays off so it does not create another full-size temporary copy.
 
+### Serveo public access
+
+The Public access instance tab creates an anonymous Serveo HTTP tunnel for one
+validated guest port. The privileged worker runs the host's OpenSSH client with
+a fixed `serveo.net` destination and a target built only from the VM's stored
+private IP plus the validated port. Nothing is installed in the guest and no
+shell command supplied by a user is executed. The detached SSH process survives
+worker updates, stops while the VM is offline, and is restored when the VM
+starts again. Its PID stays private; the API exposes only status, port,
+subdomain, URL and a bounded error message.
+
 ### Quota
 
 `limits` holds the installation default (`user_id IS NULL`) and per-user

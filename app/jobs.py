@@ -20,7 +20,7 @@ import socket
 
 from . import db
 
-ACTIONS = ("create", "start", "stop", "restart", "delete", "firewall", "snapshot", "import_image", "resize", "update")
+ACTIONS = ("create", "start", "stop", "restart", "delete", "firewall", "snapshot", "import_image", "resize", "serveo_start", "serveo_stop", "update")
 
 # Give up after this many failed attempts so a permanently broken job does not
 # spin forever.

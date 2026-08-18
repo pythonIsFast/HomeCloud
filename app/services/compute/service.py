@@ -18,6 +18,7 @@ MAX_IMAGES_PER_USER = 10
 
 # Instance names end up in a tap device name and a directory, so keep them tame.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
+SUBDOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 
 # Which action is allowed in which state, and what the row moves to while the
 # worker is busy. Keeping this in one table is what stops the "start a deleting
@@ -65,6 +66,10 @@ def public_view(row, include_secrets=False):
         "usage": config.get("usage"),
         "last_error": config.get("last_error"),
         "firewall": config.get("firewall", []),
+        "serveo": {
+            key: value for key, value in (config.get("serveo") or {}).items()
+            if key in ("enabled", "status", "port", "subdomain", "url", "error")
+        },
     }
     if include_secrets:
         view["internal"] = {
@@ -271,6 +276,56 @@ def change_flavor(user, resource_id, flavor_name):
                  payload={"was_running": previous_status == "running"})
     audit.log_action(user["id"], "compute.resize_requested", resource_id,
                      {"flavor": flavor["name"]})
+    return resources.get(user["id"], resource_id)
+
+
+def start_serveo(user, resource_id, port, subdomain=""):
+    """Expose one running VM port through a host-side Serveo tunnel."""
+    row = resources.get(user["id"], resource_id)
+    if row is None or row["service_type"] != SERVICE_TYPE:
+        raise ComputeError("instance not found", status=404)
+    if row["status"] != "running":
+        raise ComputeError("start the instance before creating public access", status=409)
+    try:
+        port = int(port)
+    except (TypeError, ValueError) as error:
+        raise ComputeError("port must be numeric") from error
+    if not 1 <= port <= 65535:
+        raise ComputeError("port must be 1-65535")
+    subdomain = (subdomain or "").strip().lower()
+    if subdomain and not SUBDOMAIN_RE.match(subdomain):
+        raise ComputeError("subdomain must contain lowercase letters, digits or dashes")
+
+    config = resources.to_dict(row)["config"]
+    if not config.get("ip"):
+        raise ComputeError("instance has no private address", status=409)
+    current = config.get("serveo") or {}
+    if current.get("status") in ("starting", "stopping"):
+        raise ComputeError("a public-access operation is already in progress", status=409)
+    config["serveo"] = {
+        "enabled": True, "status": "starting", "port": port,
+        "subdomain": subdomain, "url": None, "pid": current.get("pid"), "error": None,
+    }
+    resources.set_config(resource_id, config)
+    jobs.enqueue("serveo_start", resource_id=resource_id, user_id=user["id"])
+    audit.log_action(user["id"], "compute.serveo_requested", resource_id,
+                     {"port": port, "subdomain": subdomain})
+    return resources.get(user["id"], resource_id)
+
+
+def stop_serveo(user, resource_id):
+    row = resources.get(user["id"], resource_id)
+    if row is None or row["service_type"] != SERVICE_TYPE:
+        raise ComputeError("instance not found", status=404)
+    config = resources.to_dict(row)["config"]
+    tunnel = config.get("serveo") or {}
+    if not tunnel.get("enabled") and not tunnel.get("pid"):
+        raise ComputeError("public access is not active", status=409)
+    tunnel.update({"enabled": False, "status": "stopping"})
+    config["serveo"] = tunnel
+    resources.set_config(resource_id, config)
+    jobs.enqueue("serveo_stop", resource_id=resource_id, user_id=user["id"])
+    audit.log_action(user["id"], "compute.serveo_stop_requested", resource_id)
     return resources.get(user["id"], resource_id)
 
 
