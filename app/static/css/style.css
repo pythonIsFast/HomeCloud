@@ -214,6 +214,7 @@ code, kbd, .mono {
 ::selection { background: var(--accent-soft); color: var(--fg); }
 
 .hidden { display: none !important; }
+.icon-sprite { display: none; }
 .muted { color: var(--fg-muted); }
 .sr-only {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
@@ -556,6 +557,11 @@ table.data {
   border-collapse: collapse;
   font-size: var(--t-sm);
 }
+
+table.data .col-id { width: 56px; }
+table.data .col-actions-sm { width: 80px; }
+table.data .col-actions { width: 88px; }
+table.data .col-actions-lg { width: 150px; }
 
 table.data th {
   position: sticky;
