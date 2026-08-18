@@ -278,7 +278,8 @@
 
   const consoleOut = document.getElementById("console-out");
   const detailActions = document.getElementById("vm-detail-actions");
-  const terminal = new window.HCTerminal(consoleOut);
+  const terminal = new window.HCTerminal(consoleOut, { scrollback: 800 });
+  let consoleDecoder = new TextDecoder("utf-8");
 
   function formatMiB(bytes) {
     return Math.round((bytes || 0) / (1024 * 1024));
@@ -390,8 +391,15 @@
       return;
     }
     const wasAtBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 24;
-    if (result.data.reset || state.consoleOffset === 0) terminal.clear();
-    if (result.data.console) terminal.write(result.data.console);
+    if (result.data.reset || state.consoleOffset === 0) {
+      terminal.clear();
+      consoleDecoder = new TextDecoder("utf-8");
+    }
+    if (result.data.data) {
+      const binary = window.atob(result.data.data);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      terminal.write(consoleDecoder.decode(bytes, { stream: true }));
+    }
     state.consoleOffset = result.data.offset || state.consoleOffset;
     if (wasAtBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
   }
@@ -402,33 +410,10 @@
     consoleOut.focus();
   });
 
-  function keyToTerminalInput(event) {
-    if (event.ctrlKey && event.key.length === 1) {
-      const code = event.key.toUpperCase().charCodeAt(0);
-      return code >= 64 && code <= 95 ? String.fromCharCode(code - 64) : null;
-    }
-    const special = {
-      Enter: "\r", Backspace: "\u007f", Tab: "\t", Escape: "\u001b",
-      ArrowUp: "\u001b[A", ArrowDown: "\u001b[B",
-      ArrowRight: "\u001b[C", ArrowLeft: "\u001b[D",
-    };
-    if (special[event.key]) return special[event.key];
-    return event.key.length === 1 && !event.metaKey && !event.altKey ? event.key : null;
-  }
-
-  consoleOut.addEventListener("keydown", async (event) => {
-    const input = keyToTerminalInput(event);
-    if (!state.detailId || !input) return;
-    event.preventDefault();
-    queueTerminalInput(input);
-  });
-
-  consoleOut.addEventListener("paste", async (event) => {
+  terminal.onData((input) => {
     if (!state.detailId) return;
-    const input = event.clipboardData.getData("text");
-    if (!input) return;
-    event.preventDefault();
-    queueTerminalInput(input, "paste", 0);
+    const pasted = input.length > 1;
+    queueTerminalInput(input, pasted ? "paste" : undefined, pasted ? 0 : undefined);
   });
 
   function queueTerminalInput(input, label, delay) {

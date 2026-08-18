@@ -9,6 +9,7 @@ http.client.HTTPConnection only needs its connect() replaced -- about ten lines
 below. That is why this works without the requests package.
 """
 
+import base64
 import http.client
 import json
 import os
@@ -245,12 +246,20 @@ def read_console(vm_dir, after=0, max_bytes=4096, initial_bytes=16384):
         end = min(size, start + max_bytes)
         with open(path, "rb") as handle:
             handle.seek(start)
-            text = handle.read(end - start).decode("utf-8", "replace")
-        return {"console": text, "offset": end, "more": end < size, "reset": reset}
+            raw = handle.read(end - start)
+        # Keep raw bytes intact: a UTF-8 character can span two polling
+        # responses and is decoded client-side with a streaming decoder.
+        return {
+            "data": base64.b64encode(raw).decode("ascii"),
+            "offset": end,
+            "more": end < size,
+            "reset": reset,
+        }
     except OSError:
-        return {"console": "", "offset": 0, "more": False, "reset": False}
+        return {"data": "", "offset": 0, "more": False, "reset": False}
 
 
 def tail_console(vm_dir, max_bytes=16384):
     """Compatibility helper for callers that only need one console tail."""
-    return read_console(vm_dir, initial_bytes=max_bytes)["console"]
+    data = read_console(vm_dir, initial_bytes=max_bytes)["data"]
+    return base64.b64decode(data).decode("utf-8", "replace")

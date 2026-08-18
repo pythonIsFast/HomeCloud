@@ -1123,8 +1123,11 @@ table.data td.right { text-align: right; }
   white-space: pre;
   color: #e8e1d5;
   tab-size: 8;
+  outline: none;
 }
-.terminal-line { min-height: 1.45em; }
+.console-out:focus { border-color: #8bbadf; box-shadow: 0 0 0 2px rgba(139, 186, 223, .18); }
+.terminal-line { min-height: 1.45em; contain: content; }
+.terminal-measure { position: absolute; visibility: hidden; white-space: pre; }
 .terminal-cursor { background: #e8e1d5; color: #171513; animation: terminal-blink 1s steps(1) infinite; }
 @keyframes terminal-blink { 50% { opacity: 0; } }
 
