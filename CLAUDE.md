@@ -428,6 +428,11 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
 - Timestamps from SQLite are UTC without a marker — render with
   `HC.formatDateTime()` (absolute, `YYYY-MM-DD HH:MM`) or `HC.formatAge()`
   (`5m ago`). Both add the `Z` before parsing.
+- Authentication forms must remain recognizable to password managers: use real
+  `name`, `action`, and `method` attributes, stable `id`/`label` pairs, native
+  validation, and the standard `autocomplete` tokens (`username`,
+  `current-password`, `email`, `new-password`). JavaScript may enhance the
+  submit, but must not remove those HTML semantics.
 - The console is one page with hash-routed views (`#overview`, `#resources`,
   `#activity`, `#keys`, `#compute`, `#admin`). A new view needs a
   `<section class="view" data-view="x">`, an entry in `VIEW_LABELS` in

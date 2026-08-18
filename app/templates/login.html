@@ -15,11 +15,12 @@
       <p class="signin-sub">Local account on this installation.</p>
 
       <div class="signin-card">
-        <form id="login-form" autocomplete="on" novalidate>
+        <form id="login-form" name="login" action="/auth/api/login" method="post" autocomplete="on">
           <div class="field">
             <label class="field-label" for="login-email">Email</label>
             <input class="input input-tall" id="login-email" name="email" type="email"
-                   required autocomplete="username" spellcheck="false">
+                   required autocomplete="username" inputmode="email" autocapitalize="none"
+                   autocorrect="off" spellcheck="false">
           </div>
 
           <div class="field">
@@ -54,11 +55,12 @@
       <p class="signin-sub">The first account on this installation becomes admin.</p>
 
       <div class="signin-card">
-        <form id="register-form" autocomplete="on" novalidate>
+        <form id="register-form" name="register" action="/auth/api/register" method="post" autocomplete="on">
           <div class="field">
             <label class="field-label" for="register-email">Email</label>
             <input class="input input-tall" id="register-email" name="email" type="email"
-                   required autocomplete="username" spellcheck="false">
+                   required autocomplete="email" inputmode="email" autocapitalize="none"
+                   autocorrect="off" spellcheck="false">
           </div>
 
           <div class="field">
