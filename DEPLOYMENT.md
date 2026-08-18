@@ -39,7 +39,7 @@ editor /etc/pve/lxc/123.conf
 Keep the ordinary `pct` settings and add these lines:
 
 ```ini
-features: nesting=1,keyctl=1
+features: nesting=1
 lxc.apparmor.profile: unconfined
 lxc.cgroup2.devices.allow: c 10:232 rwm
 lxc.mount.entry: /dev/kvm dev/kvm none bind,create=file 0 0
