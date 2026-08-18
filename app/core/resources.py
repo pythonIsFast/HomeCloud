@@ -113,6 +113,23 @@ def list_for_user(user_id, service_type=None):
     )
 
 
+def list_service_page(service_type, before_id=None, limit=DEFAULT_PAGE_SIZE):
+    """One admin page of a service across every owner."""
+    limit = max(1, min(int(limit), MAX_PAGE_SIZE))
+    clauses = ["service_type = ?"]
+    params = [service_type]
+    if before_id is not None:
+        clauses.append("id < ?")
+        params.append(int(before_id))
+    params.append(limit + 1)
+    rows = db.query(
+        "SELECT * FROM resources WHERE " + " AND ".join(clauses)
+        + " ORDER BY id DESC LIMIT ?",
+        tuple(params),
+    )
+    return list(rows[:limit]), len(rows) > limit
+
+
 def count(user_id, service_type=None, exclude_status=()):
     """Number of resources of a user, for quota checks."""
     clauses = ["user_id = ?"]

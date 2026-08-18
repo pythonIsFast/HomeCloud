@@ -15,6 +15,7 @@ import functools
 
 from flask import current_app, g, jsonify, redirect, request, url_for
 
+from .. import platform_settings
 from . import jwt, models
 
 
@@ -27,7 +28,7 @@ def issue_token(user_row):
             "role": user_row["role"],
         },
         current_app.config["SECRET_KEY"],
-        ttl_seconds=current_app.config["JWT_TTL_SECONDS"],
+        ttl_seconds=platform_settings.value("jwt_ttl_hours") * 3600,
     )
 
 
@@ -107,7 +108,7 @@ def set_token_cookie(response, token):
     response.set_cookie(
         current_app.config["JWT_COOKIE_NAME"],
         token,
-        max_age=current_app.config["JWT_TTL_SECONDS"],
+        max_age=platform_settings.value("jwt_ttl_hours") * 3600,
         httponly=True,  # not readable from JavaScript -> mitigates XSS token theft
         secure=current_app.config["JWT_COOKIE_SECURE"],
         samesite="Lax",  # cookie is not sent on cross-site POSTs -> basic CSRF guard

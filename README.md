@@ -37,7 +37,7 @@ unnecessarily heavy.
 | **Networking** | Deterministic private IPv4 addresses, TAP networking, NAT, and per-instance ingress firewall rules |
 | **Public access** | Optional host-side Serveo bridge from a public HTTPS URL to one selected VM port |
 | **Accounts** | Registration control, signed sessions, API keys, tenant ownership checks, audit log, and rate limits |
-| **Administration** | Default and per-user quotas, usage visibility, and one-click update checks and updates |
+| **Administration** | Quotas, every instance, editable instance types, live platform policy, host facts, and one-click updates |
 | **Hosts** | Debian/Ubuntu installation on `amd64` and `arm64`, including supported 64-bit Raspberry Pi hosts |
 
 ## How it works

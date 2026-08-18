@@ -141,3 +141,33 @@ CREATE TABLE IF NOT EXISTS limits (
 -- Seed the installation default once. INSERT OR IGNORE keeps init-db idempotent
 -- and never overwrites limits an admin has already changed.
 INSERT OR IGNORE INTO limits (id, user_id) VALUES (1, NULL);
+
+-- ---------------------------------------------------------------------------
+-- platform_settings and compute_flavors: installation policy, not service
+-- objects. They deliberately live outside resources because they configure
+-- HomeCloud itself rather than representing something a user owns.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS platform_settings (
+    key        TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS compute_flavors (
+    name       TEXT PRIMARY KEY,
+    vcpu       INTEGER NOT NULL,
+    memory_mb  INTEGER NOT NULL,
+    disk_gb    INTEGER NOT NULL,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- These rows seed a fresh installation only. Administrators may adjust the
+-- catalogue later without an update overwriting their policy.
+INSERT OR IGNORE INTO compute_flavors (name, vcpu, memory_mb, disk_gb, enabled, is_default) VALUES
+    ('hc.nano',   1,  256,  1, 1, 0),
+    ('hc.micro',  1,  512,  2, 1, 1),
+    ('hc.small',  1, 1024,  5, 1, 0),
+    ('hc.medium', 2, 2048, 10, 1, 0),
+    ('hc.large',  4, 4096, 20, 1, 0);

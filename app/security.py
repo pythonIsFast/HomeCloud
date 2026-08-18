@@ -7,6 +7,8 @@ from collections import defaultdict, deque
 
 from flask import g, jsonify, request
 
+from . import platform_settings
+
 
 class RateLimiter:
     """In-process sliding-window limiter.
@@ -49,11 +51,13 @@ def register(app):
         if path.startswith("/static/") or path == "/healthz":
             return None
         if path in ("/auth/api/login", "/auth/api/register"):
-            limit, period, bucket = 10, 300, "auth"
+            limit = platform_settings.value("auth_rate_limit")
+            period = platform_settings.value("auth_rate_window_seconds")
+            bucket = "auth"
         elif request.method in ("POST", "PUT", "PATCH", "DELETE"):
-            limit, period, bucket = 120, 60, "write"
+            limit, period, bucket = platform_settings.value("write_rate_limit"), 60, "write"
         elif "/api/" in path or path.startswith("/api/"):
-            limit, period, bucket = 600, 60, "api"
+            limit, period, bucket = platform_settings.value("api_rate_limit"), 60, "api"
         else:
             return None
         allowed, retry_after = limiter.allow((bucket, client_address()), limit, period)

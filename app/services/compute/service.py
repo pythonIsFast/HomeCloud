@@ -5,17 +5,15 @@ this module writes the registry row plus a job, and the privileged worker does
 the actual work. Nothing in this file touches KVM, tap devices or images.
 """
 
-import re
 import ipaddress
+import re
 
-from ... import audit, jobs, limits
+from ... import audit, jobs, limits, platform_settings
 from ...core import resources
 from . import flavors
 
 SERVICE_TYPE = "compute"
 IMAGE_TYPE = "compute_image"
-MAX_IMAGES_PER_USER = 10
-
 # Instance names end up in a tap device name and a directory, so keep them tame.
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$")
 SUBDOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -110,13 +108,21 @@ def validate_firewall(rules):
     return normalized
 
 
+def accessible_instance(user, resource_id):
+    """Return an owned instance, or any instance when the actor is an admin."""
+    row = resources.get_any(resource_id) if user["role"] == "admin" else resources.get(user["id"], resource_id)
+    if row is None or row["service_type"] != SERVICE_TYPE:
+        return None
+    return row
+
+
 # --- create -----------------------------------------------------------------
 
 
 def create_instance(user, name, flavor_name, image_id=None):
     """Validate, reserve quota, write the registry row, queue the create job."""
     name = validate_name(name)
-    flavor = flavors.get(flavor_name or flavors.DEFAULT_FLAVOR)
+    flavor = flavors.get(flavor_name or flavors.default_name())
     if flavor is None:
         raise ComputeError(f"unknown flavor: {flavor_name!r}")
 
@@ -158,7 +164,7 @@ def create_instance(user, name, flavor_name, image_id=None):
     audit.log_action(user["id"], "compute.requested", resource_id,
                      {"name": name, "flavor": flavor["name"]})
 
-    return resources.get(user["id"], resource_id)
+    return resources.get_any(resource_id)
 
 
 def image_view(row):
@@ -198,8 +204,9 @@ def validate_image_import(user, name):
         raise ComputeError(f"you already have an image named {name!r}", status=409)
     active = [row for row in resources.list_for_user(user["id"], IMAGE_TYPE)
               if row["status"] not in ("deleted", "error")]
-    if len(active) >= MAX_IMAGES_PER_USER:
-        raise ComputeError(f"image limit reached ({MAX_IMAGES_PER_USER})", status=409)
+    maximum = platform_settings.value("max_images_per_user")
+    if len(active) >= maximum:
+        raise ComputeError(f"image limit reached ({maximum})", status=409)
     return name
 
 
@@ -218,8 +225,8 @@ def import_image(user, name, staged_path, filename, size_bytes, checksum):
 
 
 def update_firewall(user, resource_id, rules):
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != SERVICE_TYPE:
+    row = accessible_instance(user, resource_id)
+    if row is None:
         raise ComputeError("instance not found", status=404)
     if row["status"] == "deleted":
         raise ComputeError("instance is deleted", status=409)
@@ -229,13 +236,13 @@ def update_firewall(user, resource_id, rules):
     resources.set_config(resource_id, config)
     jobs.enqueue("firewall", resource_id=resource_id, user_id=user["id"])
     audit.log_action(user["id"], "compute.firewall_requested", resource_id, {"rules": rules})
-    return resources.get(user["id"], resource_id)
+    return resources.get_any(resource_id)
 
 
 def change_flavor(user, resource_id, flavor_name):
     """Change an existing instance size, growing its disk when necessary."""
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != SERVICE_TYPE:
+    row = accessible_instance(user, resource_id)
+    if row is None:
         raise ComputeError("instance not found", status=404)
     if row["status"] not in ("running", "stopped"):
         raise ComputeError("instance must be running or stopped to change its type", status=409)
@@ -251,8 +258,8 @@ def change_flavor(user, resource_id, flavor_name):
             f"disk cannot be reduced from {old_disk} GB to {flavor['disk_gb']} GB"
         )
 
-    used = limits.usage(user["id"], SERVICE_TYPE)
-    allowed = limits.effective(user["id"])
+    used = limits.usage(row["user_id"], SERVICE_TYPE)
+    allowed = limits.effective(row["user_id"])
     projected = {
         "vcpu": used["vcpu"] - int(current.get("vcpu", 0)) + flavor["vcpu"],
         "memory_mb": used["memory_mb"] - int(current.get("memory_mb", 0)) + flavor["memory_mb"],
@@ -276,13 +283,13 @@ def change_flavor(user, resource_id, flavor_name):
                  payload={"was_running": previous_status == "running"})
     audit.log_action(user["id"], "compute.resize_requested", resource_id,
                      {"flavor": flavor["name"]})
-    return resources.get(user["id"], resource_id)
+    return resources.get_any(resource_id)
 
 
 def start_serveo(user, resource_id, port, subdomain=""):
     """Expose one running VM port through a host-side Serveo tunnel."""
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != SERVICE_TYPE:
+    row = accessible_instance(user, resource_id)
+    if row is None:
         raise ComputeError("instance not found", status=404)
     if row["status"] != "running":
         raise ComputeError("start the instance before creating public access", status=409)
@@ -310,12 +317,12 @@ def start_serveo(user, resource_id, port, subdomain=""):
     jobs.enqueue("serveo_start", resource_id=resource_id, user_id=user["id"])
     audit.log_action(user["id"], "compute.serveo_requested", resource_id,
                      {"port": port, "subdomain": subdomain})
-    return resources.get(user["id"], resource_id)
+    return resources.get_any(resource_id)
 
 
 def stop_serveo(user, resource_id):
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != SERVICE_TYPE:
+    row = accessible_instance(user, resource_id)
+    if row is None:
         raise ComputeError("instance not found", status=404)
     config = resources.to_dict(row)["config"]
     tunnel = config.get("serveo") or {}
@@ -326,7 +333,7 @@ def stop_serveo(user, resource_id):
     resources.set_config(resource_id, config)
     jobs.enqueue("serveo_stop", resource_id=resource_id, user_id=user["id"])
     audit.log_action(user["id"], "compute.serveo_stop_requested", resource_id)
-    return resources.get(user["id"], resource_id)
+    return resources.get_any(resource_id)
 
 
 # --- actions ----------------------------------------------------------------
@@ -343,14 +350,14 @@ def perform_action(user, resource_id, action):
     if rule is None:
         raise ComputeError(f"unknown action: {action!r}")
 
-    row = resources.get(user["id"], resource_id)
+    row = accessible_instance(user, resource_id)
     if row is None:
         raise ComputeError("instance not found", status=404)
     if row["status"] == "deleted":
         raise ComputeError("instance is deleted", status=409)
 
     if not resources.transition(resource_id, rule["from"], rule["busy"]):
-        current = resources.get(user["id"], resource_id)
+        current = accessible_instance(user, resource_id)
         raise ComputeError(
             f"cannot {action} an instance in state {current['status']!r}",
             status=409,
@@ -359,7 +366,7 @@ def perform_action(user, resource_id, action):
     jobs.enqueue(action, resource_id=resource_id, user_id=user["id"])
     audit.log_action(user["id"], f"compute.{action}_requested", resource_id)
 
-    return resources.get(user["id"], resource_id)
+    return resources.get_any(resource_id)
 
 
 # --- read -------------------------------------------------------------------
@@ -382,7 +389,7 @@ def list_page(user, before_id=None, limit=None):
 
 
 def get_instance(user, resource_id, include_secrets=False):
-    row = resources.get(user["id"], resource_id)
+    row = accessible_instance(user, resource_id)
     if row is None:
         raise ComputeError("instance not found", status=404)
     return public_view(row, include_secrets=include_secrets)

@@ -1146,6 +1146,33 @@ table.data td.right { text-align: right; }
 .input-num { width: 104px; }
 .input-num-wide { width: 124px; }
 
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  gap: 8px;
+  color: var(--ink);
+  font-size: var(--t-sm);
+}
+
+.check-row input { accent-color: var(--accent); }
+
+.settings-facts {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 8px 18px;
+  margin: 0;
+  font-size: var(--t-sm);
+}
+
+.settings-facts dt { color: var(--muted); }
+.settings-facts dd { margin: 0; overflow-wrap: anywhere; font-family: var(--mono); font-size: var(--t-xs); }
+
+@media (max-width: 620px) {
+  .settings-facts { grid-template-columns: 1fr; gap: 3px; }
+  .settings-facts dd { margin-bottom: 10px; }
+}
+
 /* Multi-line input for keys and config: mono, resizable, same frame as .input. */
 .textarea {
   height: auto;

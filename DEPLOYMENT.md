@@ -45,6 +45,11 @@ not modified; recreate pre-terminal VMs to remove legacy SSH access and use the
 browser terminal. It also enables threaded gunicorn workers and disables nginx
 buffering for persistent terminal streams.
 
+The updater also applies safe database migrations. The **Administration** area
+then lets an admin manage quotas, every instance, the instance-type catalogue,
+registration/session/image policy and request-rate limits. Network topology,
+kernel paths and secrets remain host configuration in `/etc/homecloud/homecloud.env`.
+
 Administrators can run the same updater from **Administration → Updates**. The
 page follows progress across web-service restarts using
 `/var/lib/homecloud/update.status`. If an update fails, inspect the full systemd

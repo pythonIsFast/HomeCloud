@@ -624,6 +624,9 @@
 
         <div class="detail-tabs admin-tabs" role="tablist" aria-label="Administration sections">
           <button class="detail-tab" type="button" role="tab" aria-selected="true" aria-current="page" data-admin-tab="quotas">Quotas</button>
+          <button class="detail-tab" type="button" role="tab" aria-selected="false" data-admin-tab="instances">Instances</button>
+          <button class="detail-tab" type="button" role="tab" aria-selected="false" data-admin-tab="flavors">Instance types</button>
+          <button class="detail-tab" type="button" role="tab" aria-selected="false" data-admin-tab="policy">Platform policy</button>
           <button class="detail-tab" type="button" role="tab" aria-selected="false" data-admin-tab="updates">Updates</button>
         </div>
 
@@ -694,6 +697,57 @@
             <button class="btn btn-link hidden" id="admin-more" type="button">Load more</button>
           </div>
         </div>
+        </div>
+
+        <div class="admin-tab-panel hidden" data-admin-panel="instances">
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2>All instances</h2><p class="panel-kicker">Open any instance dashboard or apply an operational action.</p></div>
+              <button class="btn btn-quiet" id="admin-instances-refresh" type="button">Refresh</button>
+            </div>
+            <div class="panel-body flush"><div class="table-scroll"><table class="data"><thead><tr>
+              <th class="col-id">ID</th><th>Instance</th><th>Owner</th><th>Status</th><th>Type</th><th>Private IP</th><th></th>
+            </tr></thead><tbody id="admin-instances-body"></tbody></table></div>
+            <div class="empty hidden" id="admin-instances-empty">No instances exist.</div></div>
+            <div class="panel-foot"><span id="admin-instances-foot">&nbsp;</span><button class="btn btn-link hidden" id="admin-instances-more" type="button">Load more</button></div>
+          </div>
+        </div>
+
+        <div class="admin-tab-panel hidden" data-admin-panel="flavors">
+          <div class="panel">
+            <div class="panel-head"><div><h2>Instance type catalogue</h2><p class="panel-kicker">Changes apply to new instances and future resizes. Existing instances keep their current allocation.</p></div></div>
+            <div class="panel-body flush"><div class="table-scroll"><table class="data"><thead><tr>
+              <th>Type</th><th>vCPU</th><th>Memory MB</th><th>Disk GB</th><th>Available</th><th>Default</th><th></th>
+            </tr></thead><tbody id="admin-flavors-body"></tbody></table></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>New instance type</h2></div>
+            <div class="panel-body"><form id="admin-flavor-create-form" autocomplete="off"><div class="field-row">
+              <div class="field"><label class="field-label" for="admin-flavor-name">Name</label><input class="input" id="admin-flavor-name" required placeholder="hc.xlarge" pattern="[a-z][a-z0-9.-]{1,30}"></div>
+              <div class="field"><label class="field-label" for="admin-flavor-vcpu">vCPU</label><input class="input input-num" id="admin-flavor-vcpu" type="number" min="1" max="64" required value="2"></div>
+              <div class="field"><label class="field-label" for="admin-flavor-memory">Memory MB</label><input class="input input-num-wide" id="admin-flavor-memory" type="number" min="128" required value="4096"></div>
+              <div class="field"><label class="field-label" for="admin-flavor-disk">Disk GB</label><input class="input input-num-wide" id="admin-flavor-disk" type="number" min="1" required value="20"></div>
+              <button class="btn btn-solid" id="admin-flavor-create" type="submit">Add type</button>
+            </div></form></div>
+          </div>
+        </div>
+
+        <div class="admin-tab-panel hidden" data-admin-panel="policy">
+          <div class="panel">
+            <div class="panel-head"><div><h2>Platform policy</h2><p class="panel-kicker">These settings take effect immediately across HomeCloud.</p></div></div>
+            <div class="panel-body"><form id="admin-policy-form" autocomplete="off">
+              <div class="field-row"><label class="check-row"><input id="policy-registration" type="checkbox"> <span>Allow self-service registration</span></label>
+              <div class="field"><label class="field-label" for="policy-jwt">Session lifetime (hours)</label><input class="input input-num" id="policy-jwt" type="number" min="1" max="720"></div>
+              <div class="field"><label class="field-label" for="policy-upload">Image upload limit (MiB)</label><input class="input input-num-wide" id="policy-upload" type="number" min="16"></div>
+              <div class="field"><label class="field-label" for="policy-images">Images per user</label><input class="input input-num" id="policy-images" type="number" min="1" max="100"></div></div>
+              <div class="field-row"><div class="field"><label class="field-label" for="policy-auth-rate">Login attempts</label><input class="input input-num" id="policy-auth-rate" type="number" min="1"></div>
+              <div class="field"><label class="field-label" for="policy-auth-window">Login window (seconds)</label><input class="input input-num-wide" id="policy-auth-window" type="number" min="1"></div>
+              <div class="field"><label class="field-label" for="policy-write-rate">Write requests / minute</label><input class="input input-num-wide" id="policy-write-rate" type="number" min="10"></div>
+              <div class="field"><label class="field-label" for="policy-api-rate">Read requests / minute</label><input class="input input-num-wide" id="policy-api-rate" type="number" min="10"></div>
+              <button class="btn btn-solid" id="policy-save" type="submit">Save policy</button></div>
+            </form></div>
+          </div>
+          <div class="panel"><div class="panel-head"><h2>Host configuration</h2></div><div class="panel-body"><p class="field-note">Host wiring is intentionally read-only here. Change it in <code>/etc/homecloud/homecloud.env</code> and restart services, because changing a subnet, kernel or network interface live can break running instances.</p><dl class="settings-facts" id="admin-host-facts"></dl></div></div>
         </div>
 
         <div class="admin-tab-panel hidden" data-admin-panel="updates">

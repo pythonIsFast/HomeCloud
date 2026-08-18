@@ -12,8 +12,8 @@ import time
 
 from flask import Response, current_app, jsonify, request
 
+from ... import platform_settings
 from ...auth import guards
-from ...core import resources
 from ...vmm import console, firecracker
 from . import bp, flavors, service
 
@@ -38,7 +38,7 @@ def list_flavors():
     user = guards.current_user()
     return jsonify({
         "flavors": flavors.catalogue(),
-        "default": flavors.DEFAULT_FLAVOR,
+        "default": flavors.default_name(),
         **service.quota_summary(user),
     })
 
@@ -75,7 +75,7 @@ def create_instance():
 @guards.login_required
 def list_images():
     return jsonify({"images": service.list_images(guards.current_user()),
-                    "upload_limit_bytes": current_app.config["MAX_CONTENT_LENGTH"]})
+                    "upload_limit_bytes": platform_settings.upload_limit_bytes()})
 
 
 @bp.post("/api/images/snapshots")
@@ -115,7 +115,7 @@ def upload_image():
                 if not block:
                     break
                 size += len(block)
-                if size > current_app.config["MAX_CONTENT_LENGTH"]:
+                if size > platform_settings.upload_limit_bytes():
                     raise service.ComputeError("image exceeds the upload limit", status=413)
                 handle.write(block)
                 digest.update(block)
@@ -209,8 +209,8 @@ def instance_console(resource_id):
     firecracker itself.
     """
     user = guards.current_user()
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != service.SERVICE_TYPE:
+    row = service.accessible_instance(user, resource_id)
+    if row is None:
         return jsonify({"error": "instance not found"}), 404
 
     vm_dir = os.path.join(current_app.config["VM_DIR"], str(resource_id))
@@ -223,8 +223,8 @@ def instance_console(resource_id):
 def instance_console_stream(resource_id):
     """Continuously stream serial output as SSE without frontend polling."""
     user = guards.current_user()
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != service.SERVICE_TYPE:
+    row = service.accessible_instance(user, resource_id)
+    if row is None:
         return jsonify({"error": "instance not found"}), 404
     vm_dir = os.path.join(current_app.config["VM_DIR"], str(resource_id))
     start = max(0, request.args.get("after", default=0, type=int) or 0)
@@ -256,8 +256,8 @@ def instance_console_stream(resource_id):
 def instance_console_input(resource_id):
     """Forward a small terminal keystroke batch to the privileged worker."""
     user = guards.current_user()
-    row = resources.get(user["id"], resource_id)
-    if row is None or row["service_type"] != service.SERVICE_TYPE:
+    row = service.accessible_instance(user, resource_id)
+    if row is None:
         return jsonify({"error": "instance not found"}), 404
     if row["status"] != "running":
         return jsonify({"error": "terminal is available only while running"}), 409

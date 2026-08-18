@@ -85,6 +85,10 @@ set_update_step "Updating Python dependencies"
 echo "==> Updating Python dependencies"
 PIP_DISABLE_PIP_VERSION_CHECK=1 "${VENV}/bin/pip" install -r requirements.txt
 
+set_update_step "Applying database updates"
+echo "==> Applying database updates"
+runuser -u homecloud -- "${VENV}/bin/flask" --app app init-db
+
 set_update_step "Rebuilding the base image for new instances"
 echo "==> Rebuilding the base image for new instances"
 runuser -u homecloud -- "${VENV}/bin/flask" --app app compute-build-image

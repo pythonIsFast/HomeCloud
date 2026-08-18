@@ -18,7 +18,7 @@
     keys: "api-keys",
     compute: "compute",
     vm: "instance",
-    admin: "quotas",
+    admin: "administration",
   };
 
   const VIEWS = {};

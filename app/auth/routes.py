@@ -4,7 +4,7 @@ import re
 
 from flask import current_app, jsonify, make_response, render_template, request
 
-from .. import audit
+from .. import audit, platform_settings
 from . import bp, guards, models
 
 # Deliberately loose email check: "something@something.tld". Full RFC 5322
@@ -41,7 +41,7 @@ def login_page():
     return render_template(
         "login.html",
         app_name=current_app.config["APP_NAME"],
-        allow_registration=current_app.config["ALLOW_REGISTRATION"],
+        allow_registration=platform_settings.value("allow_registration"),
     )
 
 
@@ -50,7 +50,7 @@ def login_page():
 
 @bp.post("/api/register")
 def register():
-    if not current_app.config["ALLOW_REGISTRATION"]:
+    if not platform_settings.value("allow_registration"):
         return jsonify({"error": "registration is disabled"}), 403
 
     data = _payload()

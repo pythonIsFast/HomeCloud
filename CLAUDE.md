@@ -109,6 +109,7 @@ have its own tables, and currently does:
 | -------- | --------------------------------------------------------------- |
 | `jobs`   | work queue between the web process and the privileged worker      |
 | `limits` | quota policy, shared by every service, edited by admins           |
+| `platform_settings` / `compute_flavors` | installation policy and the instance-size catalogue, edited by admins |
 
 If you find yourself wanting a table for "my service's instances", that is the
 rule biting — use `resources`. If you want one for a mechanism the platform
@@ -185,7 +186,7 @@ Import direction is one-way and must stay that way:
 
 ```
 app/__init__.py  ->  audit, db, auth, core, services/*
-auth             ->  db, audit
+auth             ->  db, audit, platform_settings
 core             ->  db, audit, limits, auth.guards, auth.models
 services/*       ->  db, audit, jobs, limits, auth.guards, core.resources
 vmm/*            ->  db, audit, jobs, core.resources   (never auth, never core.routes)

@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 
-from .. import audit, jobs, update
+from .. import audit, jobs, platform_settings, update
 from ..core import resources
 from . import console, firecracker, images, net, serveo
 
@@ -338,7 +338,7 @@ class Worker:
         resources.set_status(image["id"], "creating")
         config = self.config_of(image)
         staged = config.get("staged_path")
-        limit = self.app.config["MAX_CONTENT_LENGTH"]
+        limit = platform_settings.upload_limit_bytes()
         target = os.path.join(self.app.config["IMAGE_DIR"], "user", str(image["user_id"]),
                               f"{image['id']}.ext4")
         try:

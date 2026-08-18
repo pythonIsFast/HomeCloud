@@ -23,7 +23,10 @@
 
   const FIELDS = ["max_vms", "max_vcpu", "max_memory_mb", "max_disk_gb"];
 
-  const state = { users: [], defaults: null, nextBeforeId: null, query: "" };
+  const state = {
+    users: [], defaults: null, nextBeforeId: null, query: "",
+    instances: [], instanceNextBeforeId: null, flavors: [], settings: null,
+  };
 
   function selectAdminTab(name) {
     adminTabs.forEach((tab) => {
@@ -33,6 +36,10 @@
       tab.setAttribute("aria-selected", active ? "true" : "false");
     });
     adminPanels.forEach((panel) => panel.classList.toggle("hidden", panel.dataset.adminPanel !== name));
+    if (name === "instances") loadInstances(false);
+    if (name === "flavors") loadFlavors();
+    if (name === "policy") loadPolicy();
+    if (name === "updates") loadUpdateStatus();
   }
 
   adminTabs.forEach((tab) => tab.addEventListener("click", () => selectAdminTab(tab.dataset.adminTab)));
@@ -145,6 +152,220 @@
     HC.toast("Update queued", "The privileged worker will apply it shortly", "success");
     await loadUpdateStatus();
   });
+
+  /* --- platform policy ---------------------------------------------------- */
+
+  const POLICY_INPUTS = {
+    allow_registration: "policy-registration",
+    jwt_ttl_hours: "policy-jwt",
+    image_upload_max_mb: "policy-upload",
+    max_images_per_user: "policy-images",
+    auth_rate_limit: "policy-auth-rate",
+    auth_rate_window_seconds: "policy-auth-window",
+    write_rate_limit: "policy-write-rate",
+    api_rate_limit: "policy-api-rate",
+  };
+
+  function renderPolicy(data) {
+    state.settings = data.settings;
+    for (const [key, id] of Object.entries(POLICY_INPUTS)) {
+      const input = document.getElementById(id);
+      if (input.type === "checkbox") input.checked = Boolean(data.settings[key]);
+      else input.value = data.settings[key];
+    }
+    document.getElementById("policy-upload").max = data.host.upload_ceiling_mb;
+    const facts = document.getElementById("admin-host-facts");
+    facts.replaceChildren();
+    const labels = {
+      vm_subnet_prefix: "VM subnet prefix", vm_egress_if: "Egress interface",
+      vm_kernel: "Guest kernel", base_image: "Base image", upload_ceiling_mb: "Host upload ceiling (MiB)",
+    };
+    for (const [key, label] of Object.entries(labels)) {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      const value = document.createElement("dd");
+      value.textContent = data.host[key];
+      facts.append(term, value);
+    }
+  }
+
+  async function loadPolicy() {
+    const result = await HC.api("/api/admin/settings");
+    if (!result.ok) {
+      HC.toast("Platform policy failed to load", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    renderPolicy(result.data);
+  }
+
+  document.getElementById("admin-policy-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = {};
+    for (const [key, id] of Object.entries(POLICY_INPUTS)) {
+      const input = document.getElementById(id);
+      payload[key] = input.type === "checkbox" ? input.checked : Number(input.value);
+    }
+    const button = document.getElementById("policy-save");
+    HC.setBusy(button, true);
+    const result = await HC.api("/api/admin/settings", { method: "PUT", body: payload });
+    HC.setBusy(button, false);
+    if (!result.ok) {
+      HC.toast("Could not save platform policy", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    state.settings = result.data.settings;
+    HC.toast("Platform policy saved", "New requests use the new policy immediately", "success");
+    await loadPolicy();
+  });
+
+  /* --- instance type catalogue ------------------------------------------- */
+
+  function flavorNumber(value) {
+    const input = numberInput(value);
+    input.min = "1";
+    return input;
+  }
+
+  function flavorRow(flavor) {
+    const row = document.createElement("tr");
+    row.appendChild(HC.cell(flavor.name, "primary"));
+    const vcpu = flavorNumber(flavor.vcpu);
+    const memory = flavorNumber(flavor.memory_mb);
+    const disk = flavorNumber(flavor.disk_gb);
+    row.append(HC.cell(vcpu), HC.cell(memory), HC.cell(disk));
+    const enabled = document.createElement("input");
+    enabled.type = "checkbox";
+    enabled.checked = Boolean(flavor.enabled);
+    enabled.setAttribute("aria-label", "Make " + flavor.name + " available");
+    const isDefault = document.createElement("input");
+    isDefault.type = "radio";
+    isDefault.name = "admin-default-flavor";
+    isDefault.checked = Boolean(flavor.is_default);
+    isDefault.setAttribute("aria-label", "Make " + flavor.name + " the default");
+    row.append(HC.cell(enabled), HC.cell(isDefault));
+    const save = document.createElement("button");
+    save.className = "btn btn-sm";
+    save.type = "button";
+    save.textContent = "Save";
+    save.addEventListener("click", async () => {
+      const payload = { vcpu: Number(vcpu.value), memory_mb: Number(memory.value),
+        disk_gb: Number(disk.value), enabled: enabled.checked, is_default: isDefault.checked };
+      HC.setBusy(save, true);
+      const result = await HC.api("/api/admin/flavors/" + encodeURIComponent(flavor.name), {
+        method: "PUT", body: payload,
+      });
+      HC.setBusy(save, false);
+      if (!result.ok) {
+        HC.toast("Could not save instance type", result.data.error || "HTTP " + result.status, "error");
+        return;
+      }
+      HC.toast("Instance type saved", flavor.name, "success");
+      await loadFlavors();
+    });
+    row.appendChild(HC.cell(save, "right"));
+    return row;
+  }
+
+  async function loadFlavors() {
+    const result = await HC.api("/api/admin/flavors");
+    if (!result.ok) {
+      HC.toast("Instance types failed to load", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    state.flavors = result.data.flavors || [];
+    document.getElementById("admin-flavors-body").replaceChildren(...state.flavors.map(flavorRow));
+  }
+
+  document.getElementById("admin-flavor-create-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = document.getElementById("admin-flavor-create");
+    const payload = {
+      name: document.getElementById("admin-flavor-name").value.trim(),
+      vcpu: Number(document.getElementById("admin-flavor-vcpu").value),
+      memory_mb: Number(document.getElementById("admin-flavor-memory").value),
+      disk_gb: Number(document.getElementById("admin-flavor-disk").value),
+      enabled: true,
+    };
+    HC.setBusy(button, true);
+    const result = await HC.api("/api/admin/flavors", { method: "POST", body: payload });
+    HC.setBusy(button, false);
+    if (!result.ok) {
+      HC.toast("Could not add instance type", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    event.target.reset();
+    HC.toast("Instance type added", payload.name, "success");
+    await loadFlavors();
+  });
+
+  /* --- every compute instance -------------------------------------------- */
+
+  const instancesBody = document.getElementById("admin-instances-body");
+  const instancesEmpty = document.getElementById("admin-instances-empty");
+  const instancesFoot = document.getElementById("admin-instances-foot");
+  const instancesMore = document.getElementById("admin-instances-more");
+
+  function instanceRow(instance) {
+    const row = document.createElement("tr");
+    row.append(HC.cell(instance.id, "num"), HC.cell(instance.name, "primary"),
+      HC.cell(instance.owner.email), HC.cell(HC.status(instance.status)),
+      HC.cell(instance.flavor || "—"), HC.cell(instance.ip || "—", "mono"));
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    const open = document.createElement("button");
+    open.className = "btn btn-sm";
+    open.type = "button";
+    open.textContent = "Open";
+    open.addEventListener("click", () => { window.location.hash = "vm/" + instance.id; });
+    actions.appendChild(open);
+    const action = instance.status === "running" ? "stop" : "start";
+    if (["running", "stopped", "error"].includes(instance.status)) {
+      const control = document.createElement("button");
+      control.className = "btn btn-sm btn-quiet";
+      control.type = "button";
+      control.textContent = action[0].toUpperCase() + action.slice(1);
+      control.addEventListener("click", async () => {
+        HC.setBusy(control, true);
+        const result = await HC.api("/compute/api/instances/" + instance.id + "/actions/" + action,
+          { method: "POST", body: {} });
+        HC.setBusy(control, false);
+        if (!result.ok) {
+          HC.toast("Instance action failed", result.data.error || "HTTP " + result.status, "error");
+          return;
+        }
+        HC.toast("Instance action queued", instance.name + " will " + action, "success");
+        await loadInstances(false);
+      });
+      actions.appendChild(control);
+    }
+    row.appendChild(HC.cell(actions, "right"));
+    return row;
+  }
+
+  function renderInstances() {
+    instancesBody.replaceChildren(...state.instances.map(instanceRow));
+    instancesEmpty.classList.toggle("hidden", state.instances.length > 0);
+    instancesFoot.textContent = state.instances.length + " instance(s) shown";
+    instancesMore.classList.toggle("hidden", !state.instanceNextBeforeId);
+  }
+
+  async function loadInstances(append) {
+    if (!append) HC.renderLoadingRows(instancesBody, 3, 7);
+    const suffix = append && state.instanceNextBeforeId ? "?before_id=" + state.instanceNextBeforeId : "";
+    const result = await HC.api("/api/admin/instances" + suffix);
+    if (!result.ok) {
+      if (!append) instancesBody.replaceChildren();
+      HC.toast("Instances failed to load", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    const page = result.data.instances || [];
+    state.instances = append ? state.instances.concat(page) : page;
+    state.instanceNextBeforeId = result.data.next_before_id || null;
+    renderInstances();
+  }
+
+  document.getElementById("admin-instances-refresh").addEventListener("click", () => loadInstances(false));
+  instancesMore.addEventListener("click", () => loadInstances(true));
 
   /* --- installation defaults ---------------------------------------------- */
 

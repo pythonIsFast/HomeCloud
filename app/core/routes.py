@@ -2,7 +2,7 @@
 
 from flask import current_app, jsonify, render_template, request
 
-from .. import audit, jobs, limits, update
+from .. import audit, jobs, limits, platform_settings, update
 from ..auth import guards, models
 from . import bp, resources
 
@@ -157,6 +157,100 @@ def admin_clear_override(user_id):
     audit.log_action(guards.current_user()["id"], "limits.clear_override", None,
                      {"target_user": user_id})
     return jsonify({"limits": limits.effective(user_id)})
+
+
+# --- admin: platform policy, flavours and all compute ----------------------
+
+
+@bp.get("/api/admin/settings")
+@guards.admin_required
+def admin_get_settings():
+    """Return editable application policy and safe read-only host facts."""
+    return jsonify({
+        "settings": platform_settings.values(),
+        "host": {
+            "vm_subnet_prefix": current_app.config["VM_SUBNET_PREFIX"],
+            "vm_egress_if": current_app.config["VM_EGRESS_IF"] or "auto-detect",
+            "vm_kernel": current_app.config["VM_KERNEL"],
+            "base_image": current_app.config["VM_BASE_ROOTFS"],
+            "upload_ceiling_mb": current_app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024),
+        },
+    })
+
+
+@bp.put("/api/admin/settings")
+@guards.admin_required
+def admin_set_settings():
+    data = request.get_json(silent=True) or {}
+    try:
+        values = platform_settings.update(data)
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": f"invalid setting: {error}"}), 400
+    audit.log_action(guards.current_user()["id"], "platform.settings_updated", None,
+                     {"keys": sorted(data)})
+    return jsonify({"settings": values})
+
+
+@bp.get("/api/admin/flavors")
+@guards.admin_required
+def admin_list_flavors():
+    from ..services.compute import flavors
+
+    return jsonify({"flavors": flavors.catalogue(include_disabled=True),
+                    "default": flavors.default_name()})
+
+
+@bp.post("/api/admin/flavors")
+@guards.admin_required
+def admin_create_flavor():
+    from ..services.compute import flavors
+
+    data = request.get_json(silent=True) or {}
+    try:
+        row = flavors.save(data.get("name"), data, creating=True)
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": f"invalid flavor: {error}"}), 400
+    audit.log_action(guards.current_user()["id"], "compute.flavor_created", None,
+                     {"name": row["name"]})
+    return jsonify({"flavor": dict(row)}), 201
+
+
+@bp.put("/api/admin/flavors/<name>")
+@guards.admin_required
+def admin_update_flavor(name):
+    from ..services.compute import flavors
+
+    data = request.get_json(silent=True) or {}
+    try:
+        row = flavors.save(name, data)
+    except (TypeError, ValueError) as error:
+        return jsonify({"error": f"invalid flavor: {error}"}), 400
+    audit.log_action(guards.current_user()["id"], "compute.flavor_updated", None,
+                     {"name": row["name"]})
+    return jsonify({"flavor": dict(row)})
+
+
+@bp.get("/api/admin/instances")
+@guards.admin_required
+def admin_list_instances():
+    """List every compute instance so an admin can open or reconfigure it."""
+    from ..services.compute import service as compute_service
+
+    rows, has_more = resources.list_service_page(
+        "compute", before_id=request.args.get("before_id", type=int),
+        limit=request.args.get("limit", type=int) or 50,
+    )
+    instances = []
+    for row in rows:
+        item = compute_service.public_view(row, include_secrets=True)
+        owner = models.get_user_by_id(row["user_id"])
+        item["owner"] = {"id": row["user_id"], "email": owner["email"] if owner else "deleted user"}
+        instances.append(item)
+    return jsonify({
+        "instances": instances,
+        "next_before_id": instances[-1]["id"] if instances and has_more else None,
+        "has_more": has_more,
+    })
 
 
 # --- admin: platform updates ------------------------------------------------
