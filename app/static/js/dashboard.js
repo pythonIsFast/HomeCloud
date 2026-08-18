@@ -153,6 +153,21 @@
 
   function resourceRow(resource) {
     const row = document.createElement("tr");
+    if (resource.service_type === "compute") {
+      row.className = "clickable-row";
+      row.tabIndex = 0;
+      row.title = "Open instance dashboard";
+      const open = () => { window.location.hash = "vm/" + resource.id; };
+      row.addEventListener("click", (event) => {
+        if (!event.target.closest("a, button, input, select")) open();
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          open();
+        }
+      });
+    }
     row.appendChild(HC.cell(resource.id, "num"));
     row.appendChild(HC.cell(resource.name, "primary"));
     row.appendChild(HC.cell(HC.tag(resource.service_type)));
