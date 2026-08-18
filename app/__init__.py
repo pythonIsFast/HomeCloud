@@ -66,7 +66,7 @@ def create_app(test_config=None):
         """Version static assets by mtime so a deploy cannot mix old JS and HTML."""
         latest = 0
         for relative_path in (
-            "css/style.css", "js/app.js", "js/login.js", "js/dashboard.js",
+            "css/style.css", "css/shell.css", "js/app.js", "js/login.js", "js/dashboard.js",
             "js/terminal.js", "js/compute.js", "js/admin.js",
         ):
             try:
