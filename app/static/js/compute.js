@@ -36,6 +36,7 @@
     pollTimer: null,
     detailId: null,
     detailInstance: null,
+    detailFlavorDraft: null,
     detailTab: "overview",
     detailTimer: null,
     consoleOffset: 0,
@@ -547,7 +548,7 @@
         flavor.memory_mb + " MB · " + flavor.disk_gb + " GB";
       return option;
     }));
-    select.value = instance.flavor || "";
+    select.value = state.detailFlavorDraft || instance.flavor || "";
     const disabled = BUSY.includes(instance.status) || instance.status === "deleted";
     select.disabled = disabled;
     submit.disabled = disabled;
@@ -701,8 +702,13 @@
       HC.toast("Instance type change failed", result.data.error || "HTTP " + result.status, "error");
       return;
     }
+    state.detailFlavorDraft = null;
     HC.toast("Instance type queued", flavor, "success");
     await Promise.all([load(false), loadFlavors(), loadDetail(instance.id)]);
+  });
+
+  document.getElementById("vm-detail-flavor-select").addEventListener("change", (event) => {
+    state.detailFlavorDraft = event.target.value;
   });
 
   function queueTerminalInput(input, label, delay) {
@@ -753,6 +759,7 @@
     if (state.detailId !== resourceId) {
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";
+      state.detailFlavorDraft = null;
     }
     loadDetail(resourceId);
   }
