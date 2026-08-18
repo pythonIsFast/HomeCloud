@@ -53,18 +53,18 @@
     </div>
   </aside>
 
+  <button class="btn btn-quiet btn-icon mobile-nav-toggle" id="sidebar-toggle"
+          type="button" aria-label="Toggle navigation" aria-expanded="false">
+    <svg><use href="#i-menu"></use></svg>
+  </button>
+
   {# ------------------------------------------------------------------- main #}
   <div class="main">
     <header class="topbar">
-      <button class="btn btn-quiet btn-icon sidebar-toggle" id="sidebar-toggle"
-              type="button" aria-label="Toggle navigation" aria-expanded="false">
-        <svg><use href="#i-menu"></use></svg>
-      </button>
-
       <nav class="crumbs" aria-label="Breadcrumb">
-        <span>{{ app_name|lower }}</span>
+        <button class="crumb-link" type="button" data-view="overview">{{ app_name|lower }}</button>
         <span class="sep">/</span>
-        <span class="current" id="breadcrumb-current">overview</span>
+        <button class="crumb-link current" id="breadcrumb-current" type="button" data-view="overview">overview</button>
       </nav>
 
       <div class="topbar-spacer"></div>

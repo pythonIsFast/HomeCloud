@@ -53,7 +53,9 @@
       }
     });
 
-    document.getElementById("breadcrumb-current").textContent = VIEWS[view];
+    const breadcrumb = document.getElementById("breadcrumb-current");
+    breadcrumb.textContent = VIEWS[view];
+    breadcrumb.dataset.view = view;
     document.title = VIEWS[view] + " · HomeCloud";
     window.dispatchEvent(new CustomEvent("homecloud:viewchange", {
       detail: { view, raw },
@@ -93,10 +95,12 @@
     navToggle.setAttribute("aria-expanded", "false");
   }
 
-  navToggle.addEventListener("click", () => {
-    const open = shell.classList.toggle("nav-open");
-    navToggle.setAttribute("aria-expanded", open ? "true" : "false");
-  });
+  if (navToggle) {
+    navToggle.addEventListener("click", () => {
+      const open = shell.classList.toggle("nav-open");
+      navToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
 
   const userMenu = document.getElementById("user-menu");
   const userMenuTrigger = document.getElementById("user-menu-trigger");
