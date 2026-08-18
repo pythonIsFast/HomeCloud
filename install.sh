@@ -130,6 +130,20 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
+cat > /etc/systemd/system/homecloud-update.service <<EOF
+[Unit]
+Description=HomeCloud platform updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=${PROJECT_DIR}
+EnvironmentFile=${ENV_FILE}
+ExecStart=${PROJECT_DIR}/update.sh
+EOF
+
 cat > /etc/nginx/sites-available/homecloud <<'EOF'
 server {
     listen 80;

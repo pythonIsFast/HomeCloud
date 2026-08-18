@@ -2,7 +2,7 @@
 
 from flask import current_app, jsonify, render_template, request
 
-from .. import audit, limits
+from .. import audit, jobs, limits, update
 from ..auth import guards, models
 from . import bp, resources
 
@@ -157,3 +157,26 @@ def admin_clear_override(user_id):
     audit.log_action(guards.current_user()["id"], "limits.clear_override", None,
                      {"target_user": user_id})
     return jsonify({"limits": limits.effective(user_id)})
+
+
+# --- admin: platform updates ------------------------------------------------
+
+
+@bp.get("/api/admin/update")
+@guards.admin_required
+def admin_update_status():
+    """Check the configured origin and report the latest update job."""
+    job = jobs.latest_update()
+    return jsonify({"check": update.check(), "job": dict(job) if job else None})
+
+
+@bp.post("/api/admin/update")
+@guards.admin_required
+def admin_request_update():
+    """Queue an update for the privileged worker."""
+    user = guards.current_user()
+    job, created = update.request(user["id"])
+    if created:
+        audit.log_action(user["id"], "platform.update_requested", None,
+                         {"job_id": job["id"]})
+    return jsonify({"job": dict(job), "created": created}), 202

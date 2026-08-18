@@ -640,6 +640,24 @@
             <button class="btn btn-link hidden" id="admin-more" type="button">Load more</button>
           </div>
         </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Platform update</h2>
+              <p class="panel-kicker" id="admin-update-status">Not checked yet.</p>
+            </div>
+            <div class="panel-head-actions">
+              <button class="btn btn-quiet" id="admin-update-check" type="button">Check for updates</button>
+              <button class="btn btn-solid" id="admin-update-run" type="button" disabled>Update now</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <p class="field-note" id="admin-update-detail">
+              Updates are pulled from the configured Git origin and applied by the privileged worker.
+            </p>
+          </div>
+        </div>
       </section>
       {% endif %}
 

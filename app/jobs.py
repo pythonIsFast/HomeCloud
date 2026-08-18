@@ -20,7 +20,7 @@ import socket
 
 from . import db
 
-ACTIONS = ("create", "start", "stop", "restart", "delete", "firewall", "snapshot", "import_image")
+ACTIONS = ("create", "start", "stop", "restart", "delete", "firewall", "snapshot", "import_image", "update")
 
 # Give up after this many failed attempts so a permanently broken job does not
 # spin forever.
@@ -126,6 +126,14 @@ def pending_for_resource(resource_id):
         one=True,
     )
     return row["n"] > 0
+
+
+def latest_update():
+    """Return the most recent platform-update job, if one exists."""
+    return db.query(
+        "SELECT * FROM jobs WHERE action = 'update' ORDER BY id DESC LIMIT 1",
+        one=True,
+    )
 
 
 def reset_stale_running(older_than_minutes=30):

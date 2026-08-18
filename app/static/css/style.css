@@ -472,6 +472,7 @@ kbd {
 }
 
 .panel-head h2 { font-size: var(--t-sm); font-weight: 600; }
+.panel-kicker { margin-top: 2px; color: var(--fg-muted); font-size: var(--t-xs); }
 .panel-head-actions { display: flex; align-items: center; gap: 8px; }
 
 .panel-body { padding: 14px; }

@@ -21,6 +21,7 @@ import json
 import os
 import platform
 import signal
+import subprocess
 import sys
 import time
 
@@ -314,6 +315,20 @@ class Worker:
         resources.set_status(image["id"], "ready")
         audit.log_action(job["user_id"], "compute.image_import", image["id"],
                          {"sha256": checksum})
+
+    def do_update(self, job):
+        """Start the fixed root-owned updater outside this worker service."""
+        self.log(f"job {job['id']}: starting platform update service")
+        # The updater restarts this worker. Mark the queue item done first so
+        # the restarted worker cannot reclaim it after a stale-job timeout.
+        jobs.finish(job["id"])
+        audit.log_action(job["user_id"], "platform.update_started", None,
+                         {"job_id": job["id"]})
+        subprocess.run(
+            ["systemctl", "start", "homecloud-update.service"],
+            check=True,
+            timeout=30,
+        )
 
     def _boot(self, row, config, plan, directory, rootfs):
         vm_config = firecracker.build_config(

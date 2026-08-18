@@ -14,10 +14,69 @@
   const foot = document.getElementById("admin-foot");
   const moreButton = document.getElementById("admin-more");
   const search = document.getElementById("admin-search");
+  const updateStatus = document.getElementById("admin-update-status");
+  const updateDetail = document.getElementById("admin-update-detail");
+  const updateCheck = document.getElementById("admin-update-check");
+  const updateRun = document.getElementById("admin-update-run");
 
   const FIELDS = ["max_vms", "max_vcpu", "max_memory_mb", "max_disk_gb"];
 
   const state = { users: [], defaults: null, nextBeforeId: null, query: "" };
+
+  function renderUpdateStatus(data) {
+    const check = data.check || {};
+    const job = data.job;
+    updateRun.disabled = !check.ok || !check.update_available ||
+      Boolean(job && ["queued", "running"].includes(job.status));
+
+    if (!check.ok) {
+      updateStatus.textContent = "Update check failed";
+      updateDetail.textContent = check.error || "Could not inspect the Git origin.";
+      return;
+    }
+    if (job && ["queued", "running"].includes(job.status)) {
+      updateStatus.textContent = "Update in progress";
+      updateDetail.textContent = "The worker has accepted update job #" + job.id + ". Services may restart briefly.";
+      return;
+    }
+    if (job && job.status === "failed") {
+      updateStatus.textContent = "Last update failed";
+      updateDetail.textContent = job.error || "The update service reported an error.";
+      return;
+    }
+    updateStatus.textContent = check.update_available ? "Update available" : "HomeCloud is up to date";
+    updateDetail.textContent = "Branch " + check.branch + " · current " + check.current.slice(0, 8) +
+      " · remote " + check.latest.slice(0, 8);
+  }
+
+  async function loadUpdateStatus() {
+    const result = await HC.api("/api/admin/update");
+    if (!result.ok) {
+      updateStatus.textContent = "Update check failed";
+      updateDetail.textContent = result.data.error || "HTTP " + result.status;
+      return;
+    }
+    renderUpdateStatus(result.data);
+  }
+
+  updateCheck.addEventListener("click", async () => {
+    HC.setBusy(updateCheck, true);
+    await loadUpdateStatus();
+    HC.setBusy(updateCheck, false);
+  });
+
+  updateRun.addEventListener("click", async () => {
+    if (!window.confirm("Start the HomeCloud update now? Services may restart briefly.")) return;
+    HC.setBusy(updateRun, true);
+    const result = await HC.api("/api/admin/update", { method: "POST", body: {} });
+    HC.setBusy(updateRun, false);
+    if (!result.ok) {
+      HC.toast("Update could not be queued", result.data.error || "HTTP " + result.status, "error");
+      return;
+    }
+    HC.toast("Update queued", "The privileged worker will apply it shortly", "success");
+    await loadUpdateStatus();
+  });
 
   /* --- installation defaults ---------------------------------------------- */
 
@@ -203,5 +262,5 @@
   });
 
   window.HCViews = window.HCViews || {};
-  window.HCViews.admin = { load: () => load(false) };
+  window.HCViews.admin = { load: () => { loadUpdateStatus(); return load(false); } };
 })();

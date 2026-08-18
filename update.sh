@@ -45,6 +45,21 @@ cat > /etc/systemd/system/homecloud-vmm.service.d/worker.conf <<'EOF'
 KillMode=process
 EOF
 
+echo "==> Installing the platform update service"
+cat > /etc/systemd/system/homecloud-update.service <<EOF
+[Unit]
+Description=HomeCloud platform updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=${PROJECT_DIR}
+EnvironmentFile=/etc/homecloud/homecloud.env
+ExecStart=${PROJECT_DIR}/update.sh
+EOF
+
 echo "==> Enabling concurrent terminal streams"
 install -d -m 0755 /etc/systemd/system/homecloud-web.service.d
 cat > /etc/systemd/system/homecloud-web.service.d/streaming.conf <<EOF

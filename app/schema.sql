@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     resource_id  INTEGER,
     user_id      INTEGER,
-    action       TEXT    NOT NULL,              -- create | start | stop | restart | delete
+    action       TEXT    NOT NULL,              -- compute actions | update
     payload_json TEXT    NOT NULL DEFAULT '{}',
     status       TEXT    NOT NULL DEFAULT 'queued',  -- queued|running|done|failed
     host         TEXT,
