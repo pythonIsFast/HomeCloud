@@ -248,6 +248,9 @@ kbd {
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  position: fixed;
+  inset: 0;
+  width: 100%;
   height: 100vh;
   height: 100dvh;
   min-height: 0;
