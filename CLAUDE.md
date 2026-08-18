@@ -174,6 +174,9 @@ HomeCloud/
 │                          #   bin/{firecracker,jailer}, images/, vms/
 ├── wsgi.py                # gunicorn entry point
 ├── requirements.txt
+├── install.sh              # fresh Debian/Ubuntu installation (run as root)
+├── update.sh               # in-place deployment update (run as root)
+├── DEPLOYMENT.md           # short deployment entry point for the two scripts
 ├── .gitignore
 └── CLAUDE.md
 ```
