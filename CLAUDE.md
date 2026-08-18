@@ -220,12 +220,16 @@ all existing sessions.
 ```bash
 python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 flask --app app init-db          # creates instance/homecloud.db from schema.sql
-flask --app app run --debug      # development
-gunicorn --workers 2 --bind 127.0.0.1:8000 wsgi:app   # production
+flask --app app run --debug --port 6002               # development
+gunicorn --workers 2 --bind 127.0.0.1:6002 wsgi:app   # production
 ```
 
+HomeCloud listens on **port 6002** by convention, in development as well as in
+production. The port is not stored in the code -- it is passed on the command
+line (`--port` / `--bind`), so keep using 6002 in any command or unit file.
+
 Deployment target is a Proxmox LXC container with nginx as reverse proxy in
-front of gunicorn on `127.0.0.1:8000`. When TLS is terminated by nginx, set
+front of gunicorn on `127.0.0.1:6002`. When TLS is terminated by nginx, set
 `HOMECLOUD_COOKIE_SECURE=1`.
 
 ---

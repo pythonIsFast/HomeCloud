@@ -1,8 +1,8 @@
 """HomeCloud application factory.
 
 Usage:
-    development:  flask --app app run --debug
-    production:   gunicorn "app:create_app()" --bind 127.0.0.1:8000
+    development:  flask --app app run --debug --port 6002
+    production:   gunicorn "app:create_app()" --bind 127.0.0.1:6002
 """
 
 import os
