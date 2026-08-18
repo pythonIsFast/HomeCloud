@@ -18,7 +18,7 @@ def create_app(test_config=None):
     # instance_relative_config puts the instance folder next to the package
     # (project_root/instance) -- that is where the SQLite file lives.
     app = Flask(__name__, instance_relative_config=True)
-    app.name = "HomeCloud"
+    # The display name lives in config["APP_NAME"]; Flask.name is read-only.
 
     # The instance folder is not created by Flask automatically.
     os.makedirs(app.instance_path, exist_ok=True)
