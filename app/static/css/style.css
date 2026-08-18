@@ -172,11 +172,14 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { height: 100%; }
+html { height: 100%; overscroll-behavior-y: none; }
 
 body {
   margin: 0;
   min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior-y: none;
   background: var(--canvas);
   color: var(--fg);
   font-family: var(--sans);
@@ -245,7 +248,9 @@ kbd {
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
 }
 
 /* --- sidebar -------------------------------------------------------------- */
@@ -259,6 +264,7 @@ kbd {
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
 }
 
@@ -366,7 +372,17 @@ kbd {
 
 /* --- topbar --------------------------------------------------------------- */
 
-.main { display: flex; flex-direction: column; min-width: 0; }
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
 
 .topbar {
   display: flex;
