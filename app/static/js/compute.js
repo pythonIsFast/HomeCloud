@@ -15,6 +15,7 @@
   const flavorNote = document.getElementById("vm-flavor-note");
   const imageSelect = document.getElementById("vm-image");
   const form = document.getElementById("create-vm-form");
+  const createPanel = document.getElementById("vm-create-panel");
   const errorBox = document.getElementById("create-vm-error");
 
   // Nothing to do on pages without the compute view (there are none today, but
@@ -25,11 +26,13 @@
     instances: [],
     flavors: [],
     images: [],
+    imageTimer: null,
     nextBeforeId: null,
     quota: null,
     pollTimer: null,
     detailId: null,
     detailInstance: null,
+    detailTab: "overview",
     detailTimer: null,
     consoleOffset: 0,
     consoleTimer: null,
@@ -140,6 +143,7 @@
 
   function instanceRow(instance) {
     const row = document.createElement("tr");
+    row.className = "clickable-row";
     row.appendChild(HC.cell(instance.id, "num"));
     const name = HC.cell(instance.name, "primary");
     name.tabIndex = 0;
@@ -161,6 +165,9 @@
     row.appendChild(addressCell(instance));
     row.appendChild(HC.cell(HC.formatAge(instance.created_at), "mono"));
     row.appendChild(HC.cell(openButton(instance), "right"));
+    row.addEventListener("click", (event) => {
+      if (!event.target.closest("button")) window.location.hash = "vm/" + instance.id;
+    });
     return row;
   }
 
@@ -188,7 +195,14 @@
 
   async function loadImages() {
     const result = await HC.api("/compute/api/images");
-    if (result.ok) { state.images = result.data.images || []; renderImages(); }
+    if (!result.ok) return;
+    state.images = result.data.images || [];
+    renderImages();
+    if (state.detailInstance) renderSnapshots(state.detailInstance);
+    if (state.imageTimer) window.clearTimeout(state.imageTimer);
+    state.imageTimer = state.images.some((image) => ["pending", "creating"].includes(image.status))
+      ? window.setTimeout(loadImages, 2000)
+      : null;
   }
 
   async function load(append) {
@@ -258,8 +272,18 @@
     }
 
     document.getElementById("vm-name").value = "";
+    createPanel.classList.add("hidden");
     HC.toast("Instance queued", result.data.instance.name + " is being created", "success");
     await Promise.all([load(false), loadFlavors()]);
+  });
+
+  document.getElementById("vm-create-toggle").addEventListener("click", () => {
+    createPanel.classList.remove("hidden");
+    document.getElementById("vm-name").focus();
+  });
+  document.getElementById("vm-create-cancel").addEventListener("click", () => {
+    createPanel.classList.add("hidden");
+    errorBox.classList.add("hidden");
   });
 
   /* --- actions ------------------------------------------------------------ */
@@ -350,15 +374,29 @@
     }
     document.getElementById("vm-detail-status").replaceChildren(HC.status(instance.status));
     document.getElementById("vm-detail-ip").textContent = instance.ip || "no network address yet";
+    document.getElementById("vm-detail-id").textContent = "#" + instance.id;
+    document.getElementById("vm-detail-flavor").textContent = instance.flavor || "Custom";
+    document.getElementById("vm-detail-address").textContent = instance.ip || "Not assigned";
+    document.getElementById("vm-detail-created").textContent = HC.formatDateTime(instance.created_at);
     const firewallRules = document.getElementById("vm-firewall-rules");
-    firewallRules.replaceChildren(...(instance.firewall || []).map((rule, index) => {
+    const rules = instance.firewall || [];
+    firewallRules.replaceChildren(...rules.map((rule, index) => {
       const button = document.createElement("button");
-      button.className = "btn btn-sm btn-quiet";
+      button.className = "firewall-rule";
       button.type = "button";
-      button.textContent = rule.protocol + " " + rule.port + " from " + rule.source + " ×";
-      button.addEventListener("click", () => saveFirewall(instance, (instance.firewall || []).filter((_, i) => i !== index)));
+      const endpoint = document.createElement("strong");
+      endpoint.textContent = rule.protocol.toUpperCase() + " " + rule.port;
+      const source = document.createElement("span");
+      source.textContent = rule.source;
+      const remove = document.createElement("span");
+      remove.textContent = "Remove";
+      remove.setAttribute("aria-hidden", "true");
+      button.append(endpoint, source, remove);
+      button.addEventListener("click", () => saveFirewall(instance, rules.filter((_, i) => i !== index)));
       return button;
     }));
+    document.getElementById("vm-firewall-empty").classList.toggle("hidden", rules.length > 0);
+    renderSnapshots(instance);
 
     detailActions.replaceChildren();
     if (BUSY.includes(instance.status)) {
@@ -374,26 +412,65 @@
       detailActions.appendChild(actionButton("Restart", instance, "restart"));
     } else {
       detailActions.appendChild(actionButton("Start", instance, "start"));
-      const snapshot = document.createElement("button");
-      snapshot.className = "btn btn-sm";
-      snapshot.type = "button";
-      snapshot.textContent = "Snapshot";
-      snapshot.addEventListener("click", () => createSnapshot(instance));
-      detailActions.appendChild(snapshot);
     }
     detailActions.appendChild(actionButton("Delete", instance, "delete", true));
   }
 
-  async function createSnapshot(instance) {
-    const name = window.prompt("Snapshot name", instance.name + "-snapshot");
-    if (!name) return;
+  async function createSnapshot(instance, name, button) {
+    HC.setBusy(button, true);
     const result = await HC.api("/compute/api/images/snapshots", {
       method: "POST", body: { instance_id: instance.id, name },
     });
+    HC.setBusy(button, false);
     if (!result.ok) { HC.toast("Snapshot failed", result.data.error || "HTTP " + result.status, "error"); return; }
     HC.toast("Snapshot queued", name, "success");
-    loadImages();
+    document.getElementById("snapshot-name").value = "";
+    await loadImages();
+    renderSnapshots(instance);
   }
+
+  function renderSnapshots(instance) {
+    const images = state.images.filter((image) => image.source_instance_id === instance.id);
+    document.getElementById("vm-snapshot-body").replaceChildren(...images.map((image) => {
+      const row = document.createElement("tr");
+      row.appendChild(HC.cell(image.name, "primary"));
+      row.appendChild(HC.cell(HC.status(image.status)));
+      row.appendChild(HC.cell(image.size_bytes ? Math.round(image.size_bytes / 1048576) + " MiB" : "–", "mono"));
+      row.appendChild(HC.cell(HC.formatAge(image.created_at), "mono"));
+      return row;
+    }));
+    document.getElementById("vm-snapshot-empty").classList.toggle("hidden", images.length > 0);
+    const allowed = instance.status === "stopped";
+    document.getElementById("snapshot-submit").disabled = !allowed;
+    document.getElementById("snapshot-note").textContent = allowed
+      ? "The disk is idle and ready for a consistent snapshot."
+      : "Stop the instance before creating a snapshot.";
+  }
+
+  function setDetailTab(tab, updateHash) {
+    const allowed = ["overview", "terminal", "firewall", "snapshots"];
+    state.detailTab = allowed.includes(tab) ? tab : "overview";
+    document.querySelectorAll("[data-vm-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.vmPanel !== state.detailTab;
+    });
+    document.querySelectorAll("[data-vm-tab]").forEach((button) => {
+      if (button.dataset.vmTab === state.detailTab) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    if (updateHash && state.detailId) window.location.hash = "vm/" + state.detailId + "/" + state.detailTab;
+    if (state.detailTab === "terminal" && state.detailInstance && state.detailInstance.status === "running") scheduleConsolePoll(0);
+    else clearConsoleTimer();
+  }
+
+  document.querySelectorAll("[data-vm-tab]").forEach((button) => {
+    button.addEventListener("click", () => setDetailTab(button.dataset.vmTab, true));
+  });
+
+  document.getElementById("vm-snapshot-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!state.detailInstance) return;
+    createSnapshot(state.detailInstance, document.getElementById("snapshot-name").value, document.getElementById("snapshot-submit"));
+  });
 
   function scheduleDetailPoll(instance) {
     if (state.detailTimer) window.clearTimeout(state.detailTimer);
@@ -405,7 +482,7 @@
 
   async function loadDetail(resourceId) {
     const result = await HC.api("/compute/api/instances/" + resourceId);
-    if (window.location.hash !== "#vm/" + resourceId) return;
+    if (!window.location.hash.startsWith("#vm/" + resourceId)) return;
     if (!result.ok) {
       HC.toast("Instance failed to load", result.data.error || "HTTP " + result.status, "error");
       window.location.hash = "compute";
@@ -416,7 +493,7 @@
     state.detailInstance = instance;
     renderDetail(instance);
     scheduleDetailPoll(instance);
-    if (instance.status === "running") {
+    if (instance.status === "running" && state.detailTab === "terminal") {
       if (state.consoleOffset === 0) terminal.clear();
       scheduleConsolePoll(0);
     } else {
@@ -523,10 +600,12 @@
   }
 
   function routeDetail() {
-    const match = window.location.hash.match(/^#vm\/(\d+)$/);
+    const match = window.location.hash.match(/^#vm\/(\d+)(?:\/(overview|terminal|firewall|snapshots))?$/);
     if (!match) {
       state.detailId = null;
       state.detailInstance = null;
+      if (state.imageTimer) window.clearTimeout(state.imageTimer);
+      state.imageTimer = null;
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";
       if (state.terminalInputTimer) window.clearTimeout(state.terminalInputTimer);
@@ -537,6 +616,7 @@
       return;
     }
     const resourceId = Number(match[1]);
+    setDetailTab(match[2] || "overview", false);
     if (state.detailId !== resourceId) {
       state.consoleOffset = 0;
       state.pendingTerminalInput = "";

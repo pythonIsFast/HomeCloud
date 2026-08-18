@@ -195,22 +195,6 @@
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>Firewall</h2></div>
-          <div class="panel-body">
-            <p class="field-note">Ingress is denied by default. Add TCP or UDP ports that this VM may accept.</p>
-            <form id="vm-firewall-form" autocomplete="off">
-              <div class="field-row">
-                <div class="field"><label class="field-label" for="firewall-protocol">Protocol</label><select class="select" id="firewall-protocol"><option>tcp</option><option>udp</option></select></div>
-                <div class="field"><label class="field-label" for="firewall-port">Port</label><input class="input input-num" id="firewall-port" type="number" min="1" max="65535" required></div>
-                <div class="field field-grow"><label class="field-label" for="firewall-source">Source</label><input class="input" id="firewall-source" value="0.0.0.0/0" required></div>
-                <button class="btn btn-solid" type="submit">Allow</button>
-              </div>
-            </form>
-            <div class="row-actions" id="vm-firewall-rules"></div>
-          </div>
-        </div>
-
-        <div class="panel">
           <div class="panel-head">
             <div class="toolbar">
               <div class="find">
@@ -359,6 +343,7 @@
           </div>
           <div class="view-head-actions">
             <button class="btn" data-action="reload" type="button">Refresh</button>
+            <button class="btn btn-solid" id="vm-create-toggle" type="button">New instance</button>
           </div>
         </div>
 
@@ -393,8 +378,8 @@
           </div>
         </div>
 
-        <div class="panel">
-          <div class="panel-head"><h2>New instance</h2></div>
+        <div class="panel hidden" id="vm-create-panel">
+          <div class="panel-head"><h2>New instance</h2><button class="btn btn-sm btn-quiet" id="vm-create-cancel" type="button">Cancel</button></div>
           <div class="panel-body">
             <form id="create-vm-form" autocomplete="off">
               <div class="field-row top">
@@ -476,6 +461,14 @@
           <div class="view-head-actions" id="vm-detail-actions"></div>
         </div>
 
+        <nav class="detail-tabs" id="vm-detail-tabs" aria-label="Instance sections">
+          <button class="detail-tab" type="button" data-vm-tab="overview">Overview</button>
+          <button class="detail-tab" type="button" data-vm-tab="terminal">Terminal</button>
+          <button class="detail-tab" type="button" data-vm-tab="firewall">Firewall</button>
+          <button class="detail-tab" type="button" data-vm-tab="snapshots">Snapshots</button>
+        </nav>
+
+        <div class="vm-tab-panel" data-vm-panel="overview">
         <div class="metrics" aria-label="Instance resources">
           <div class="metric tone-brand">
             <div class="metric-label"><i class="dot"></i><span class="label-micro">vCPU</span></div>
@@ -498,7 +491,18 @@
             <div class="metric-note" id="vm-detail-ip">&nbsp;</div>
           </div>
         </div>
+        <div class="panel vm-summary-panel">
+          <div class="panel-head"><h2>Instance details</h2></div>
+          <div class="panel-body detail-list">
+            <div><span class="label-micro">Instance ID</span><strong class="mono" id="vm-detail-id">–</strong></div>
+            <div><span class="label-micro">Flavor</span><strong id="vm-detail-flavor">–</strong></div>
+            <div><span class="label-micro">Guest address</span><strong class="mono" id="vm-detail-address">–</strong></div>
+            <div><span class="label-micro">Created</span><strong id="vm-detail-created">–</strong></div>
+          </div>
+        </div>
+        </div>
 
+        <div class="vm-tab-panel" data-vm-panel="terminal" hidden>
         <div class="panel">
           <div class="panel-head">
             <h2>Terminal</h2>
@@ -513,6 +517,51 @@
               Click the terminal and type. It is a root serial session inside this
               instance, guarded by your HomeCloud account.
             </p>
+          </div>
+        </div>
+        </div>
+
+        <div class="vm-tab-panel" data-vm-panel="firewall" hidden>
+          <div class="section-intro">
+            <div><h2>Ingress firewall</h2><p>Traffic is denied unless an allow rule matches.</p></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Add rule</h2></div>
+            <div class="panel-body">
+              <form id="vm-firewall-form" autocomplete="off">
+                <div class="field-row">
+                  <div class="field"><label class="field-label" for="firewall-protocol">Protocol</label><select class="select" id="firewall-protocol"><option>tcp</option><option>udp</option></select></div>
+                  <div class="field"><label class="field-label" for="firewall-port">Port</label><input class="input input-num" id="firewall-port" type="number" min="1" max="65535" required></div>
+                  <div class="field field-grow"><label class="field-label" for="firewall-source">Source CIDR</label><input class="input" id="firewall-source" value="0.0.0.0/0" required></div>
+                  <button class="btn btn-solid" type="submit">Add rule</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Allowed traffic</h2></div>
+            <div class="panel-body" id="vm-firewall-rules"></div>
+            <div class="empty hidden" id="vm-firewall-empty">No allow rules. All incoming traffic is blocked.</div>
+          </div>
+        </div>
+
+        <div class="vm-tab-panel" data-vm-panel="snapshots" hidden>
+          <div class="section-intro">
+            <div><h2>Snapshots</h2><p>Create reusable private images from this instance while it is stopped.</p></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Create snapshot</h2></div>
+            <div class="panel-body">
+              <form id="vm-snapshot-form" class="field-row" autocomplete="off">
+                <div class="field field-grow"><label class="field-label" for="snapshot-name">Name</label><input class="input" id="snapshot-name" required placeholder="web-01-snapshot"></div>
+                <button class="btn btn-solid" id="snapshot-submit" type="submit">Create snapshot</button>
+              </form>
+              <p class="field-note" id="snapshot-note">The instance must be stopped for a consistent snapshot.</p>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Images from this instance</h2></div>
+            <div class="panel-body flush"><div class="table-scroll"><table class="data"><thead><tr><th>Name</th><th>Status</th><th>Size</th><th>Created</th></tr></thead><tbody id="vm-snapshot-body"></tbody></table></div><div class="empty hidden" id="vm-snapshot-empty">No snapshots created yet.</div></div>
           </div>
         </div>
       </section>

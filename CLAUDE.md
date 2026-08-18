@@ -432,9 +432,11 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
   to non-admins instead of rendering an empty page. Services without a blueprint
   are `.nav-item.is-disabled` placeholders.
 - Compute's index is intentionally an overview: it creates and lists instances
-  only. Clicking an instance opens its `#vm/<id>` dashboard, where resource
-  allocation, lifecycle controls and the terminal live. Do not put VM controls
-  back into the compute index.
+  only. Clicking an instance opens its task-oriented dashboard. The routes
+  `#vm/<id>/{overview,terminal,firewall,snapshots}` are stable, directly
+  addressable tabs. Lifecycle controls stay in the shared header; terminal,
+  firewall and snapshot forms stay inside their own tabs. Do not put VM
+  controls back into the compute index or combine the tabs into one long page.
 - `terminal.js` is the in-house ANSI terminal renderer. Keep it dependency-free
   and bounded: it supports the serial-shell control sequences HomeCloud emits,
   retains at most 800 lines and must never use `innerHTML` for terminal output.

@@ -1131,6 +1131,82 @@ table.data td.right { text-align: right; }
 .terminal-cursor { background: #e8e1d5; color: #171513; animation: terminal-blink 1s steps(1) infinite; }
 @keyframes terminal-blink { 50% { opacity: 0; } }
 
+/* Instance workspace: a stable header with task-oriented tabs keeps controls
+   close to their context instead of turning the overview into a control dump. */
+.detail-tabs {
+  display: flex;
+  gap: 2px;
+  margin: -2px 0 18px;
+  padding: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--hairline);
+}
+.detail-tab {
+  position: relative;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.detail-tab:hover { color: var(--fg); background: var(--surface-hover); }
+.detail-tab[aria-current="page"] { color: var(--accent); font-weight: 600; }
+.detail-tab[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  background: var(--accent);
+}
+.vm-tab-panel[hidden] { display: none; }
+.section-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.section-intro h2 { font-size: var(--t-lg); }
+.section-intro p { margin-top: 3px; color: var(--fg-muted); font-size: var(--t-sm); }
+.vm-summary-panel { margin-top: 16px; }
+.detail-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+.detail-list > div { display: grid; gap: 4px; min-width: 0; }
+.detail-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-sm); }
+.firewall-rule {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--fg-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.firewall-rule:last-child { border-bottom: 0; }
+.firewall-rule:hover { background: var(--bad-soft); color: var(--bad); }
+.firewall-rule strong { font-family: var(--mono); color: var(--fg); }
+.firewall-rule span:last-child { color: var(--bad); font-size: var(--t-xs); }
+.clickable-row { cursor: pointer; }
+.clickable-row:hover td { background: var(--surface-hover); }
+
+@media (max-width: 760px) {
+  .detail-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .firewall-rule { grid-template-columns: 90px minmax(0, 1fr) auto; gap: 8px; }
+}
+
 /* Quota cell: "used / allowed", the used part emphasised. */
 .quota { font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
 .quota .used { color: var(--fg); }

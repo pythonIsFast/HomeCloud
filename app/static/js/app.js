@@ -192,6 +192,7 @@ const HC = (function () {
   // Which lifecycle states count as good / transitional / bad.
   const STATUS_TONE = {
     running: "is-ok",
+    ready: "is-ok",
     pending: "is-warn",
     creating: "is-warn",
     stopping: "is-warn",
