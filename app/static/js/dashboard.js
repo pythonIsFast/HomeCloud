@@ -246,16 +246,18 @@
     return parts.length ? parts.join(" ") : "";
   }
 
+  /** Audit rows stay flat mono text with a dot -- a log, not a wall of pills. */
   function eventName(action) {
+    let tone = "";
+    if (action.endsWith("_failed") || action.includes("delete")) tone = " is-bad";
+    else if (action.includes("create") || action.includes("register")) tone = " is-ok";
+
     const span = document.createElement("span");
-    span.className = "status " + (action.endsWith("_failed") ? "is-bad" : "is-idle");
+    span.className = "event" + tone;
     const dot = document.createElement("i");
     dot.className = "dot";
     span.appendChild(dot);
-    const text = document.createElement("span");
-    text.className = "mono";
-    text.textContent = action;
-    span.appendChild(text);
+    span.appendChild(document.createTextNode(action));
     return span;
   }
 

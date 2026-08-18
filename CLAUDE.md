@@ -241,40 +241,58 @@ webfonts** (an external font request is a forbidden dependency).
 
 ### The intended look
 
-An **infrastructure console**, not a marketing dashboard: dense rows, hairline
-rules instead of shadows, a warm-neutral greyscale, monospace for everything
-machine-generated, and exactly one accent colour used as punctuation.
-Reference points: Vercel Geist (restrained neutrality, mono numerals), Linear
-(hairlines, near-black surfaces, tight tracking), AWS Cloudscape compact
-density, GitHub Primer (14/12 px text scale).
+A **warm infrastructure console**: dense enough to read like a tool, warm
+enough to feel built rather than generated. Paper-toned neutrals (never pure
+grey, never pure black), one brand hue in copper, one informational hue in
+teal, three status hues, moderate rounding, and monospace for everything
+machine-generated.
+
+Reference points for structure and density: Vercel Geist (restrained palette,
+tabular numerals, 6–8 px radii), Linear (hairlines carrying the structure,
+tight negative tracking on headings), AWS Cloudscape (compact density on a 4 px
+scale), GitHub Primer (13–15 px UI text scale).
+
+**Colour always means something.** Every hue in the palette is tied to a role —
+brand, informational, ok, warning, bad. There is no decorative colour, and
+equally: the UI must not read as black-and-white. If a figure or state has a
+meaning, give it its hue.
 
 ### Anti-patterns — do not reintroduce these
 
 They are the visual signature of generated UI and were deliberately removed:
 
 - **No gradients.** Not on panels, not on the brand mark, not on text, not as a
-  decorative background. Flat surfaces only.
-- **No indigo/violet accent.** The accent is ochre (`--accent`), and it is used
-  only for links, focus outlines and the active nav marker.
-- **The primary button is monochrome** — near-black on light, near-white on dark
-  (`--solid`). Never accent-coloured.
-- **No shadows on panels.** Shadows exist only on floating overlays (menu,
-  modal, toast) via `--shadow-overlay`.
-- **Small radii only** (`--r-xs` 2 px … `--r-lg` 6 px). No `rounded-xl` cards.
-  Pill shapes are limited to the 6 px status dot.
-- **No row of big-number cards.** Aggregate figures go into the `.metrics`
-  strip: one hairline box, inline cells, value in mono.
-- **No card-wrapping everything and no nested cards.** One flat `.panel` per
-  section; tables sit directly inside it.
+  decorative background. Flat fills only.
+- **No indigo/violet/cyan accent, no neon on dark.** The brand hue is copper
+  (`--accent`: `#b4552b` light, `#e08a57` dark); the informational hue is teal
+  (`--info`). Status hues are muted, not saturated.
+- **No glassmorphism**, no backdrop blur for decoration.
+- **No row of big-number cards.** Aggregate figures live in the `.metrics`
+  strip: one bordered box, inline cells, a `tone-*` hue per figure, and a zero
+  drops back to `--fg-faint` (a zero is not news).
+- **No card-wrapping everything and no nested cards.** One `.panel` per section;
+  tables sit directly inside it.
 - **Empty states are one left-aligned line** of text (`.empty`), optionally with
   a `<code>` pointer. No illustrations, no centred hero, no call-to-action art.
-- **No icons inside labelled buttons.** Icons appear in the sidebar and in
-  icon-only controls only.
-- **No status pills.** Status is a coloured 6 px dot plus the plain word
-  (`HC.status()`).
+- **No icons inside labelled buttons.** Icons belong in the sidebar and in
+  icon-only controls.
 - **No marketing copy.** Labels state what a thing is (`status = running`,
   `0 rows`, `no service registered`), never how great it is. The sign-in page is
-  a single narrow centred card — no split hero, no feature list, no tagline.
+  one narrow centred card — no split hero, no feature list, no tagline.
+
+### Rounding and depth
+
+Earlier revisions over-corrected into a flat, colourless look. The current
+settings are the intended balance — keep them:
+
+- Radii: `--r-xs` 4 px (tags, kbd) · `--r-sm` 6 px (buttons, inputs, nav items,
+  toasts) · `--r` 9 px (panels, metric strip, menu) · `--r-lg` 12 px (modal) ·
+  `--r-pill` (status chips, count badges, dots). Nothing is square-cornered,
+  nothing is a bubble.
+- Two shadow levels only: `--shadow-sm` on resting surfaces (panels, metric
+  strip, sign-in card) and `--shadow-overlay` on floating layers. Never invent a
+  third.
+- The primary button is brand-coloured (`.btn-solid` uses `--accent`).
 
 ### Files
 
@@ -294,17 +312,24 @@ They are the visual signature of generated UI and were deliberately removed:
 Every colour, size, radius and spacing value is a custom property in `:root`.
 Never hardcode a hex value or a px font size in a component.
 
-- Greyscale: `--n-0` … `--n-900` (warm, no blue tint), mapped to roles
-  `--canvas`, `--surface`, `--surface-sunken/hover/active`, `--hairline`,
-  `--hairline-strong`, `--fg`, `--fg-secondary`, `--fg-muted`, `--fg-faint`.
-- Type scale: `--t-micro` 10.5 px (uppercase labels) · `--t-xs` 11.5 ·
-  `--t-sm` 12.5 · `--t-base` 13 (body) · `--t-md` 14 · `--t-lg` 16 · `--t-xl` 20.
-  Headings use negative tracking; only `.label-micro` uses positive tracking.
+- Surfaces: paper-toned and warm — `--canvas`, `--surface`,
+  `--surface-sunken/hover/active`, `--hairline`, `--hairline-strong`. Text:
+  `--fg`, `--fg-secondary`, `--fg-muted`, `--fg-faint`. Dark mode is warm
+  charcoal (`#141210`), never `#000`.
+- Hues, each with a `-soft` tinted companion for backgrounds: `--accent`
+  (brand, copper), `--info` (teal), `--ok`, `--warn`, `--bad`. Tinted grounds
+  are what `.status`, `.tag`, `.initials`, `.field-error` and the active nav item
+  are built from.
+- Type scale: `--t-micro` 11 px (uppercase labels) · `--t-xs` 12 · `--t-sm` 13 ·
+  `--t-base` 13.5 (body) · `--t-md` 15 · `--t-lg` 17 · `--t-xl` 21 ·
+  `--t-2xl` 24 (page titles, metric figures). Headings use negative tracking;
+  only `.label-micro` uses positive tracking.
 - Fonts: `--sans` (system stack) and `--mono`. Mono is structural, not
-  decorative: ids, timestamps, counts, service types, breadcrumbs, key values.
-  `font-variant-numeric: tabular-nums` is set on `body`.
-- Density: rows are `--row-py` 7 px tall, nav items 26 px, buttons/inputs
-  26–28 px, topbar 44 px, sidebar 216 px.
+  decorative: ids, timestamps, service types, breadcrumbs, event names, key
+  values. Metric figures are sans with `tabular-nums` — mono zeros read badly at
+  24 px.
+- Density: rows are `--row-py` 9 px, nav items and buttons 30 px, inputs 30 px
+  (36 px on the sign-in form), topbar 48 px, sidebar 224 px.
 - Both themes are mandatory: light default, dark via `prefers-color-scheme`,
   explicit choice in `localStorage` (`homecloud-theme`) applied as
   `data-theme` on `<html>`. A new token must be added to the light block *and*
@@ -313,11 +338,17 @@ Never hardcode a hex value or a px font size in a component.
 ### Components
 
 `.panel` (+ `.panel-head` / `.panel-body[.flush]` / `.panel-foot`), `.metrics` +
-`.metric`, `table.data` with `td.num` / `td.mono` / `td.primary` / `td.right`,
-`.status` + `.dot`, `.tag`, `.btn` (+ `-solid` / `-quiet` / `-link` / `-danger` /
-`-icon` / `-tall` / `-block`), `.field` + `.input` / `.select`, `.find` (filter
-box with a `/` hint), `.empty`, `.bar` (loading), `.menu`, `.scrim` + `.modal`,
+`.metric.tone-{brand,ok,warn,info}`, `table.data` with `td.num` / `td.mono` /
+`td.primary` / `td.right` / `td.wrap`, `.status.is-{ok,warn,bad,idle}` (tinted
+chip, dot + word), `.event.is-{ok,bad}` (flat mono log line), `.tag` (teal mono
+identifier), `.btn` (+ `-solid` / `-quiet` / `-link` / `-danger` / `-icon` /
+`-tall` / `-sm` / `-block`), `.field` + `.field-label` / `.input` / `.select` /
+`.field-note` / `.field-error`, `.find` (filter box with a `/` hint), `.secret`
+(password reveal), `.empty`, `.bar` (loading), `.menu`, `.scrim` + `.modal`,
 `.toast`, `.label-micro`, `.initials`, `kbd`.
+
+Status chips carry a tinted ground; audit events do not — a log of 50 rows full
+of pills is noise, so `.event` stays flat mono text with a coloured dot.
 
 ### Behaviour rules
 

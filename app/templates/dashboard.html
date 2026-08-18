@@ -116,25 +116,34 @@
           </div>
         </div>
 
-        {# Metric strip instead of a row of big-number cards. #}
+        {# Metric strip instead of a row of big-number cards. The dot and the
+           figure share one hue per meaning, so colour carries information. #}
         <div class="metrics">
-          <div class="metric">
-            <div class="label-micro">Resources</div>
+          <div class="metric tone-brand">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">Resources</span>
+            </div>
             <div class="metric-value" id="stat-total">–</div>
             <div class="metric-note" id="stat-total-hint">&nbsp;</div>
           </div>
-          <div class="metric">
-            <div class="label-micro">Running</div>
+          <div class="metric tone-ok">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">Running</span>
+            </div>
             <div class="metric-value" id="stat-running">–</div>
             <div class="metric-note">status = running</div>
           </div>
-          <div class="metric">
-            <div class="label-micro">Not settled</div>
+          <div class="metric tone-warn">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">Not settled</span>
+            </div>
             <div class="metric-value" id="stat-attention">–</div>
             <div class="metric-note">pending, creating, error</div>
           </div>
-          <div class="metric">
-            <div class="label-micro">API keys</div>
+          <div class="metric tone-info">
+            <div class="metric-label">
+              <i class="dot"></i><span class="label-micro">API keys</span>
+            </div>
             <div class="metric-value" id="stat-keys">–</div>
             <div class="metric-note">active credentials</div>
           </div>
