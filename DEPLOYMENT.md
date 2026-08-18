@@ -1,25 +1,30 @@
-# HomeCloud on an empty Proxmox LXC container
+# HomeCloud on an empty LXC or Raspberry Pi host
 
-This is a production-shaped setup for an **amd64 Debian 12 or Ubuntu 24.04
-LXC** running on a Proxmox host with KVM available. It runs the web app as an
-unprivileged `homecloud` user and the VMM worker as root because the worker
-creates TAP devices and NAT rules.
+This is a production-shaped setup for either:
+
+- an **amd64 or arm64** Debian 12/Ubuntu 24.04 LXC on a Proxmox host; or
+- a **64-bit Raspberry Pi host** running Raspberry Pi OS or Ubuntu directly.
+
+HomeCloud runs the web app as an unprivileged `homecloud` user and the VMM
+worker as root because the worker creates TAP devices and NAT rules.
 
 ## Important security boundary
 
 HomeCloud runs untrusted microVM workloads. Firecracker needs `/dev/kvm` and
-the worker needs `CAP_NET_ADMIN`. Therefore the LXC described here is
-**privileged** and has a relaxed AppArmor profile. Do not use it for mutually
-untrusted tenants and do not co-locate unrelated sensitive workloads in it.
-Use a dedicated Proxmox node or, preferably, a small VM instead if that
-boundary is not acceptable.
+the worker needs `CAP_NET_ADMIN`. The LXC variant is therefore **privileged**
+and has a relaxed AppArmor profile. Do not use it for mutually untrusted
+tenants and do not co-locate unrelated sensitive workloads in it. Use a
+dedicated Proxmox node or, preferably, a small VM instead if that boundary is
+not acceptable.
 
 An unprivileged LXC is deliberately not the supported target: device ownership
 mapping and LXC confinement commonly prevent usable access to `/dev/kvm` and
 `/dev/net/tun`. The preflight checks in HomeCloud will make a missing device or
 host tool explicit.
 
-## 1. Prepare the container on the Proxmox host
+## 1. Prepare the host
+
+### 1.1 Proxmox LXC
 
 Create a privileged Debian 12 or Ubuntu 24.04 container with a static/DHCP
 network interface, enough disk for VM images, and nested containers enabled.
@@ -54,6 +59,26 @@ test -r /dev/net/tun && test -w /dev/net/tun && echo 'TUN is available'
 
 If either command fails, stop here and correct the LXC configuration. Do not
 work around this by making broad device mounts available to the container.
+
+### 1.2 Raspberry Pi as a bare-metal server
+
+For a Raspberry Pi, use a **64-bit** OS and run HomeCloud directly on the Pi;
+this avoids the additional LXC privilege relaxation. A Pi 4 or Pi 5 with ample
+RAM and SSD-backed storage is the practical minimum. The important requirement
+is hardware virtualization, not the board name: the host must report `aarch64`
+and expose a read/write `/dev/kvm`.
+
+```bash
+uname -m                    # must print aarch64
+sudo modprobe kvm
+test -r /dev/kvm && test -w /dev/kvm && echo 'KVM is available'
+test -r /dev/net/tun && test -w /dev/net/tun && echo 'TUN is available'
+```
+
+Do not continue if KVM is unavailable. Firecracker uses KVM; it does not
+emulate x86 guests on ARM. ARM hosts must use the `aarch64` Firecracker binary,
+kernel and rootfs, and every microVM must use the same architecture as its
+host.
 
 ## 2. Install the host packages
 
@@ -95,16 +120,18 @@ worker restart.
 
 ## 4. Install Firecracker and the base image
 
-The project currently uses the x86_64 Firecracker CI artifacts named
-`vmlinux-6.1.155` and `ubuntu-24.04.squashfs`. Download the published artifact
-pair together and keep their names, so the project defaults resolve without
-extra configuration:
+The project uses Firecracker CI artifacts named `vmlinux-6.1.155` and
+`ubuntu-24.04.squashfs`. The download uses the architecture reported by the
+host, so it works for both `x86_64` and `aarch64`. Download the kernel and
+rootfs as a matching pair and keep these local file names, so the project
+defaults resolve without extra configuration:
 
 ```bash
 cd /opt/homecloud
 install -d -o homecloud -g homecloud -m 0750 instance/bin instance/images
 
-ARCH=x86_64
+ARCH=$(uname -m)
+case "$ARCH" in x86_64|aarch64) ;; *) echo "unsupported architecture: $ARCH"; exit 1;; esac
 RELEASE_URL=https://github.com/firecracker-microvm/firecracker/releases
 LATEST=$(basename "$(curl -fsSLI -o /dev/null -w '%{url_effective}' "${RELEASE_URL}/latest")")
 curl -fsSL "${RELEASE_URL}/download/${LATEST}/firecracker-${LATEST}-${ARCH}.tgz" \
@@ -114,7 +141,7 @@ install -o root -g homecloud -m 0750 \
   instance/bin/firecracker
 rm -rf "release-${LATEST}-${ARCH}"
 
-ARTIFACTS=https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.15/x86_64
+ARTIFACTS=https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.15/${ARCH}
 curl -fL "${ARTIFACTS}/vmlinux-6.1.155" \
   -o instance/images/vmlinux-6.1.155
 curl -fL "${ARTIFACTS}/ubuntu-24.04.squashfs" \
@@ -130,6 +157,10 @@ Pin and checksum these artifacts before a long-lived production deployment.
 The Firecracker project documents its current release download and CI-artifact
 workflow in its [getting-started guide](https://github.com/firecracker-microvm/firecracker/blob/main/docs/getting-started.md).
 The worker does not currently invoke `jailer`; downloading it is unnecessary.
+On ARM, the kernel content must be an aarch64 `Image`-format kernel even though
+this project stores it under the neutral `vmlinux-6.1.155` file name. Firecracker
+documents the architecture-specific kernel formats in its
+[rootfs/kernel guide](https://github.com/firecracker-microvm/firecracker/blob/main/docs/rootfs-and-kernel-setup.md).
 
 ## 5. Configure environment and systemd
 

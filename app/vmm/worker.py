@@ -19,6 +19,7 @@ connection instead of holding one open for days.
 
 import json
 import os
+import platform
 import signal
 import sys
 import time
@@ -40,6 +41,14 @@ class Worker:
     def preflight(self):
         """Check everything that would otherwise fail per-VM, once, loudly."""
         config = self.app.config
+        architecture = platform.machine().lower()
+
+        if architecture not in ("x86_64", "aarch64"):
+            raise SystemExit(
+                "unsupported host architecture "
+                f"{architecture!r}: HomeCloud requires x86_64 or aarch64"
+            )
+        self.log(f"host architecture: {architecture}")
 
         if os.geteuid() != 0:
             self.log("WARNING: not running as root -- tap devices and NAT will fail")

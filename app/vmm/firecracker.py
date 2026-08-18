@@ -12,6 +12,7 @@ below. That is why this works without the requests package.
 import http.client
 import json
 import os
+import platform
 import signal
 import socket
 import subprocess
@@ -22,11 +23,21 @@ import time
 #   reboot=k      a reboot inside the guest exits firecracker instead of hanging
 #   panic=1       a kernel panic exits too, so a broken VM does not linger
 #   pci=off       microVMs have no PCI bus; skipping the probe saves boot time
-BOOT_ARGS = (
-    "console=ttyS0 reboot=k panic=1 pci=off nomodule ro"
-    " root=/dev/vda"
-    " ip={guest_ip}::{host_ip}:{netmask}::eth0:off"
-)
+def _boot_args(net_plan):
+    """Return a kernel command line for the host's CPU architecture.
+
+    Firecracker runs same-architecture guests only.  ``pci=off`` is useful on
+    x86_64 where this project uses Firecracker's MMIO devices, but it is not an
+    ARM boot parameter and must not be passed to aarch64 guests.
+    """
+    machine = platform.machine().lower()
+    args = ["console=ttyS0", "panic=1", "nomodule", "ro", "root=/dev/vda"]
+    if machine == "x86_64":
+        args.extend(("reboot=k", "pci=off"))
+    args.append(
+        "ip={guest_ip}::{host_ip}:{netmask}::eth0:off".format(**net_plan)
+    )
+    return " ".join(args)
 
 
 class FirecrackerError(Exception):
@@ -72,11 +83,7 @@ def build_config(vm_dir, kernel_path, rootfs_path, vcpu, memory_mb, net_plan):
     return {
         "boot-source": {
             "kernel_image_path": kernel_path,
-            "boot_args": BOOT_ARGS.format(
-                guest_ip=net_plan["guest_ip"],
-                host_ip=net_plan["host_ip"],
-                netmask=net_plan["netmask"],
-            ),
+            "boot_args": _boot_args(net_plan),
         },
         "drives": [
             {
