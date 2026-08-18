@@ -303,23 +303,6 @@
     return row;
   }
 
-  function renderOverviewActivity() {
-    const body = document.getElementById("overview-activity-body");
-    const empty = document.getElementById("overview-activity-empty");
-    const recent = state.activity.slice(0, 6);
-
-    body.replaceChildren(
-      ...recent.map((entry) => {
-        const row = document.createElement("tr");
-        row.appendChild(HC.cell(eventName(entry.action)));
-        row.appendChild(HC.cell(summarizeDetails(entry), "mono"));
-        row.appendChild(HC.cell(HC.formatAge(entry.created_at), "mono"));
-        return row;
-      })
-    );
-    empty.classList.toggle("hidden", recent.length > 0);
-  }
-
   async function loadActivity() {
     const body = document.getElementById("activity-body");
     HC.renderLoadingRows(body, 4, 5);
@@ -336,7 +319,6 @@
     document
       .getElementById("activity-empty")
       .classList.toggle("hidden", state.activity.length > 0);
-    renderOverviewActivity();
   }
 
   /* =========================================================================
