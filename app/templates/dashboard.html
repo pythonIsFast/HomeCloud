@@ -35,15 +35,6 @@
           <svg><use href="#i-cpu"></use></svg><span class="nav-label">Compute</span>
           <span class="nav-count" id="nav-count-compute">0</span>
         </button>
-        {# Placeholders: each becomes a blueprint under app/services/. #}
-        <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
-          <svg><use href="#i-bucket"></use></svg><span class="nav-label">Storage</span>
-          <span class="nav-count">—</span>
-        </span>
-        <span class="nav-item is-disabled" aria-disabled="true" title="No blueprint registered">
-          <svg><use href="#i-database"></use></svg><span class="nav-label">Databases</span>
-          <span class="nav-count">—</span>
-        </span>
       </div>
 
       {% if user['role'] == 'admin' %}
@@ -116,8 +107,7 @@
           <div>
             <h1>Overview</h1>
             <p class="view-sub">
-              State of this installation. Services register their objects in the
-              shared resource table; the counts below read straight from it.
+              A live summary of your infrastructure, credentials and recent changes.
             </p>
           </div>
           <div class="view-head-actions">
@@ -185,8 +175,7 @@
           <div>
             <h1>Resources</h1>
             <p class="view-sub">
-              One table holds every service object, keyed by service type. Rows
-              appear here as soon as a service creates them.
+              Search and review everything running in your HomeCloud account.
             </p>
           </div>
           <div class="view-head-actions">
@@ -227,10 +216,7 @@
             </div>
 
             <div class="empty hidden" id="resources-empty">
-              <strong>No resources.</strong> Register the first service blueprint under
-              <code>app/services/</code> and create rows through
-              <code>core.resources.create()</code> — they show up here without any
-              dashboard change.
+              <strong>No resources yet.</strong> Create your first instance from Compute.
             </div>
 
             <div class="empty hidden" id="resources-no-match">
@@ -435,9 +421,7 @@
               </table>
             </div>
             <div class="empty hidden" id="vm-empty">
-              <strong>No instances.</strong> Create one above. The privileged worker
-              (<code>sudo python -m app.vmm</code>) has to be running, otherwise the
-              instance stays in <code>pending</code>.
+              <strong>No instances yet.</strong> Create one to start running workloads.
             </div>
           </div>
           <div class="panel-foot">

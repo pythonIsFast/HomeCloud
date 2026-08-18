@@ -429,8 +429,8 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
   `<section class="view" data-view="x">`, an entry in `VIEW_LABELS` in
   dashboard.js and a `.nav-item[data-view="x"]`. A view only counts as available
   if its section is actually in the DOM — that is how `#admin` stays invisible
-  to non-admins instead of rendering an empty page. Services without a blueprint
-  are `.nav-item.is-disabled` placeholders.
+  to non-admins instead of rendering an empty page. Do not show unavailable
+  services as disabled placeholders in the production navigation.
 - Compute's index is intentionally an overview: it creates and lists instances
   only. Clicking an instance opens its task-oriented dashboard. The routes
   `#vm/<id>/{overview,terminal,firewall,snapshots}` are stable, directly
