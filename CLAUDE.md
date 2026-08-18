@@ -167,7 +167,7 @@ HomeCloud/
 │   │   └── __main__.py        # python -m app.vmm
 │   ├── static/
 │   │   ├── css/style.css
-│   │   └── js/{app.js,login.js,dashboard.js,compute.js,admin.js}
+│   │   └── js/{app.js,login.js,dashboard.js,terminal.js,compute.js,admin.js}
 │   └── templates/{base.html,_icons.html,login.html,dashboard.html}
 ├── instance/              # gitignored host state, never in the repo:
 │                          #   homecloud.db, secret_key,
@@ -435,6 +435,9 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
   only. Clicking an instance opens its `#vm/<id>` dashboard, where resource
   allocation, lifecycle controls and the terminal live. Do not put VM controls
   back into the compute index.
+- `terminal.js` is the in-house ANSI terminal renderer. Keep it dependency-free
+  and bounded: it supports the serial-shell control sequences HomeCloud emits,
+  retains at most 800 lines and must never use `innerHTML` for terminal output.
 - **A service brings its own script** (`compute.js`, `admin.js`), loaded after
   `dashboard.js`, registering itself as
   `window.HCViews.<name> = { load: () => ... }`. The shell calls every

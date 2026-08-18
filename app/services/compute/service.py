@@ -59,6 +59,7 @@ def public_view(row, include_secrets=False):
         "memory_mb": config.get("memory_mb"),
         "disk_gb": config.get("disk_gb"),
         "ip": config.get("ip"),
+        "usage": config.get("usage"),
         "last_error": config.get("last_error"),
     }
     if include_secrets:

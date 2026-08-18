@@ -278,6 +278,16 @@
 
   const consoleOut = document.getElementById("console-out");
   const detailActions = document.getElementById("vm-detail-actions");
+  const terminal = new window.HCTerminal(consoleOut);
+
+  function formatMiB(bytes) {
+    return Math.round((bytes || 0) / (1024 * 1024));
+  }
+
+  function formatGiB(bytes) {
+    const gib = (bytes || 0) / (1024 * 1024 * 1024);
+    return gib < 1 ? gib.toFixed(2) : gib.toFixed(1);
+  }
 
   function clearConsoleTimer() {
     if (state.consoleTimer) window.clearTimeout(state.consoleTimer);
@@ -297,11 +307,27 @@
     document.getElementById("vm-detail-name").textContent = instance.name;
     document.getElementById("vm-detail-subtitle").textContent =
       "Instance #" + instance.id + " · created " + HC.formatAge(instance.created_at);
-    document.getElementById("vm-detail-vcpu").textContent = instance.vcpu || "–";
-    document.getElementById("vm-detail-memory").textContent =
-      instance.memory_mb ? instance.memory_mb + " MiB" : "–";
-    document.getElementById("vm-detail-disk").textContent =
-      instance.disk_gb ? instance.disk_gb + " GiB" : "–";
+    const usage = instance.usage;
+    const cpuLimit = (instance.vcpu || 0) * 100;
+    if (usage) {
+      document.getElementById("vm-detail-vcpu").textContent = usage.cpu_percent + "%";
+      document.getElementById("vm-detail-vcpu-note").textContent =
+        "used of " + cpuLimit + "% allocation";
+      document.getElementById("vm-detail-memory").textContent =
+        formatMiB(usage.memory_bytes) + " MiB";
+      document.getElementById("vm-detail-memory-note").textContent =
+        "used of " + (instance.memory_mb || 0) + " MiB allocation";
+      document.getElementById("vm-detail-disk").textContent =
+        formatGiB(usage.disk_bytes) + " GiB";
+      document.getElementById("vm-detail-disk-note").textContent =
+        "actual host blocks of " + (instance.disk_gb || 0) + " GiB provisioned";
+    } else {
+      for (const id of ["vcpu", "memory", "disk"]) {
+        document.getElementById("vm-detail-" + id).textContent = "–";
+        document.getElementById("vm-detail-" + id + "-note").textContent =
+          "waiting for a running-worker sample";
+      }
+    }
     document.getElementById("vm-detail-status").replaceChildren(HC.status(instance.status));
     document.getElementById("vm-detail-ip").textContent = instance.ip || "no network address yet";
 
@@ -326,8 +352,9 @@
   function scheduleDetailPoll(instance) {
     if (state.detailTimer) window.clearTimeout(state.detailTimer);
     state.detailTimer = null;
-    if (!BUSY.includes(instance.status)) return;
-    state.detailTimer = window.setTimeout(() => loadDetail(instance.id), 1500);
+    const delay = instance.status === "running" ? 2000 : (BUSY.includes(instance.status) ? 1500 : 0);
+    if (!delay) return;
+    state.detailTimer = window.setTimeout(() => loadDetail(instance.id), delay);
   }
 
   async function loadDetail(resourceId) {
@@ -343,11 +370,12 @@
     renderDetail(instance);
     scheduleDetailPoll(instance);
     if (instance.status === "running") {
-      if (state.consoleOffset === 0) consoleOut.textContent = "loading terminal ...";
+      if (state.consoleOffset === 0) terminal.clear();
       scheduleConsolePoll(0);
     } else {
       clearConsoleTimer();
-      consoleOut.textContent = "Terminal is available while the instance is running.";
+      terminal.clear();
+      terminal.write("Terminal is available while the instance is running.");
     }
   }
 
@@ -357,13 +385,13 @@
       "/compute/api/instances/" + state.detailId + "/console?after=" + state.consoleOffset
     );
     if (!result.ok) {
-      consoleOut.textContent = result.data.error || "HTTP " + result.status;
+      terminal.clear();
+      terminal.write(result.data.error || "HTTP " + result.status);
       return;
     }
     const wasAtBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 24;
-    if (result.data.reset || state.consoleOffset === 0) consoleOut.textContent = "";
-    if (result.data.console) consoleOut.append(document.createTextNode(result.data.console));
-    if (!consoleOut.textContent) consoleOut.textContent = "(console is still empty)";
+    if (result.data.reset || state.consoleOffset === 0) terminal.clear();
+    if (result.data.console) terminal.write(result.data.console);
     state.consoleOffset = result.data.offset || state.consoleOffset;
     if (wasAtBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
   }

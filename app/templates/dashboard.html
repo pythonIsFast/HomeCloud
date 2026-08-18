@@ -459,17 +459,17 @@
           <div class="metric tone-brand">
             <div class="metric-label"><i class="dot"></i><span class="label-micro">vCPU</span></div>
             <div class="metric-value" id="vm-detail-vcpu">–</div>
-            <div class="metric-note">allocated to this instance</div>
+            <div class="metric-note" id="vm-detail-vcpu-note">measuring host usage</div>
           </div>
           <div class="metric tone-info">
             <div class="metric-label"><i class="dot"></i><span class="label-micro">Memory</span></div>
             <div class="metric-value" id="vm-detail-memory">–</div>
-            <div class="metric-note">MiB allocated</div>
+            <div class="metric-note" id="vm-detail-memory-note">measuring host usage</div>
           </div>
           <div class="metric tone-warn">
             <div class="metric-label"><i class="dot"></i><span class="label-micro">Disk</span></div>
             <div class="metric-value" id="vm-detail-disk">–</div>
-            <div class="metric-note">GiB provisioned</div>
+            <div class="metric-note" id="vm-detail-disk-note">measuring host usage</div>
           </div>
           <div class="metric tone-ok">
             <div class="metric-label"><i class="dot"></i><span class="label-micro">State</span></div>
@@ -486,8 +486,8 @@
             </div>
           </div>
           <div class="panel-body">
-            <pre class="console-out mono" id="console-out" tabindex="0"
-                 aria-label="Terminal output"></pre>
+            <div class="console-out mono" id="console-out" tabindex="0"
+                 role="textbox" aria-label="Terminal output" aria-multiline="true"></div>
             <p class="field-note">
               Click the terminal and type. It is a root serial session inside this
               instance, guarded by your HomeCloud account.
@@ -611,6 +611,7 @@
 {# Order matters: the shell first, then the per-view scripts that register
    themselves with it through window.HCViews. #}
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/terminal.js') }}"></script>
 <script src="{{ url_for('static', filename='js/compute.js') }}"></script>
 {% if user['role'] == 'admin' %}
 <script src="{{ url_for('static', filename='js/admin.js') }}"></script>

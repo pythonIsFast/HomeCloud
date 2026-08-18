@@ -36,6 +36,7 @@ class Worker:
         self.host = jobs.local_host_name()
         self.running = True
         self.console_bridges = {}
+        self.usage_samples = {}
 
     # --- setup ------------------------------------------------------------
 
@@ -182,6 +183,7 @@ class Worker:
             "mac": plan["mac"],
             "pid": pid,
             "rootfs": rootfs,
+            "usage": None,
             "last_error": None,
         })
         resources.set_status(row["id"], "running")
@@ -210,7 +212,7 @@ class Worker:
         pid = self._boot(row, config, plan, directory, rootfs)
         self.ensure_console_bridge(row["id"])
 
-        resources.merge_config(row["id"], {"pid": pid, "last_error": None})
+        resources.merge_config(row["id"], {"pid": pid, "usage": None, "last_error": None})
         resources.set_status(row["id"], "running")
         audit.log_action(job["user_id"], "compute.start", row["id"])
 
@@ -224,7 +226,7 @@ class Worker:
         self.stop_console_bridge(row["id"])
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
 
-        resources.merge_config(row["id"], {"pid": None})
+        resources.merge_config(row["id"], {"pid": None, "usage": None})
         resources.set_status(row["id"], "stopped")
         audit.log_action(job["user_id"], "compute.stop", row["id"], {"via": outcome})
 
@@ -243,7 +245,7 @@ class Worker:
         net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
         images.remove_vm_dir(self.vm_dir(row["id"]))
 
-        resources.merge_config(row["id"], {"pid": None, "rootfs": None})
+        resources.merge_config(row["id"], {"pid": None, "rootfs": None, "usage": None})
         resources.set_status(row["id"], "deleted")
         audit.log_action(job["user_id"], "compute.delete", row["id"])
 
@@ -276,6 +278,40 @@ class Worker:
         if bridge is not None:
             bridge.stop()
 
+    def sample_usage(self, row, config):
+        """Return actual host consumption for a running Firecracker process."""
+        pid = config.get("pid")
+        try:
+            with open(f"/proc/{int(pid)}/stat", "r", encoding="ascii") as handle:
+                stat = handle.read()
+            fields = stat[stat.rfind(")") + 2:].split()
+            cpu_ticks = int(fields[11]) + int(fields[12])  # utime + stime
+
+            rss_kb = 0
+            with open(f"/proc/{int(pid)}/status", "r", encoding="ascii") as handle:
+                for line in handle:
+                    if line.startswith("VmRSS:"):
+                        rss_kb = int(line.split()[1])
+                        break
+        except (OSError, ValueError, IndexError):
+            return None
+
+        now = time.monotonic()
+        previous = self.usage_samples.get(row["id"])
+        self.usage_samples[row["id"]] = (cpu_ticks, now)
+        cpu_percent = 0.0
+        if previous is not None and now > previous[1]:
+            cpu_percent = max(0.0, (cpu_ticks - previous[0]) / os.sysconf("SC_CLK_TCK")
+                              / (now - previous[1]) * 100)
+
+        rootfs = config.get("rootfs") or os.path.join(self.vm_dir(row["id"]), "rootfs.ext4")
+        return {
+            "cpu_percent": round(cpu_percent, 1),
+            "memory_bytes": rss_kb * 1024,
+            "disk_bytes": images.disk_usage_bytes(rootfs),
+            "sampled_at": int(time.time()),
+        }
+
     # --- supervision ------------------------------------------------------
 
     def supervise(self):
@@ -293,12 +329,16 @@ class Worker:
             config = self.config_of(row)
             if firecracker.is_alive(config.get("pid")):
                 self.ensure_console_bridge(row["id"])
+                usage = self.sample_usage(row, config)
+                if usage is not None:
+                    resources.merge_config(row["id"], {"usage": usage})
                 continue
 
             self.log(f"resource {row['id']}: process gone, marking stopped")
             self.stop_console_bridge(row["id"])
+            self.usage_samples.pop(row["id"], None)
             net.delete_tap(config.get("tap") or f"hc-vm{row['id']}")
-            resources.merge_config(row["id"], {"pid": None})
+            resources.merge_config(row["id"], {"pid": None, "usage": None})
             resources.set_status(row["id"], "stopped")
             audit.log_action(row["user_id"], "compute.exited", row["id"],
                              {"reason": "process gone"})

@@ -1108,21 +1108,25 @@ table.data td.right { text-align: right; }
 
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
-/* Serial console output. Scrolls inside its own box so the page never does. */
+/* A small in-house ANSI terminal screen. Scrolls inside its own box. */
 .console-out {
-  max-height: 340px;
+  min-height: 400px;
+  max-height: 560px;
   margin: 0 0 10px;
-  padding: 12px;
+  padding: 14px;
   overflow: auto;
-  background: var(--surface-sunken);
-  border: 1px solid var(--hairline);
+  background: #171513;
+  border: 1px solid #443b34;
   border-radius: var(--r-sm);
   font-size: var(--t-xs);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--fg-secondary);
+  line-height: 1.45;
+  white-space: pre;
+  color: #e8e1d5;
+  tab-size: 8;
 }
+.terminal-line { min-height: 1.45em; }
+.terminal-cursor { background: #e8e1d5; color: #171513; animation: terminal-blink 1s steps(1) infinite; }
+@keyframes terminal-blink { 50% { opacity: 0; } }
 
 /* Quota cell: "used / allowed", the used part emphasised. */
 .quota { font-family: var(--mono); font-size: var(--t-xs); white-space: nowrap; }
