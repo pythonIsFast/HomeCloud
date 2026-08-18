@@ -17,6 +17,7 @@
     activity: "activity",
     keys: "api-keys",
     compute: "compute",
+    vm: "instance",
     admin: "quotas",
   };
 
@@ -35,7 +36,9 @@
      ====================================================================== */
 
   function showView(name) {
-    const view = VIEWS[name] ? name : "overview";
+    const raw = String(name || "");
+    const requested = raw.split("/")[0];
+    const view = VIEWS[requested] ? requested : "overview";
     state.view = view;
 
     document.querySelectorAll(".view").forEach((section) => {
@@ -52,6 +55,9 @@
 
     document.getElementById("breadcrumb-current").textContent = VIEWS[view];
     document.title = VIEWS[view] + " · HomeCloud";
+    window.dispatchEvent(new CustomEvent("homecloud:viewchange", {
+      detail: { view, raw },
+    }));
     closeNav();
     closeUserMenu();
   }

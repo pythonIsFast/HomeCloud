@@ -422,7 +422,7 @@
                     <th>Status</th>
                     <th>Address</th>
                     <th>Created</th>
-                    <th style="width:230px"></th>
+                    <th style="width:88px"></th>
                   </tr>
                 </thead>
                 <tbody id="vm-body"></tbody>
@@ -440,12 +440,49 @@
           </div>
         </div>
 
-        <div class="panel hidden" id="console-panel">
+      </section>
+
+      {# ------------------------------------------------------ view: vm detail #}
+      <section class="view" data-view="vm" hidden>
+        <div class="view-head">
+          <div>
+            <button class="btn btn-sm btn-quiet" id="vm-detail-back" type="button">
+              &larr; Compute
+            </button>
+            <h1 id="vm-detail-name">Instance</h1>
+            <p class="view-sub" id="vm-detail-subtitle">Loading instance details…</p>
+          </div>
+          <div class="view-head-actions" id="vm-detail-actions"></div>
+        </div>
+
+        <div class="metrics" aria-label="Instance resources">
+          <div class="metric tone-brand">
+            <div class="metric-label"><i class="dot"></i><span class="label-micro">vCPU</span></div>
+            <div class="metric-value" id="vm-detail-vcpu">–</div>
+            <div class="metric-note">allocated to this instance</div>
+          </div>
+          <div class="metric tone-info">
+            <div class="metric-label"><i class="dot"></i><span class="label-micro">Memory</span></div>
+            <div class="metric-value" id="vm-detail-memory">–</div>
+            <div class="metric-note">MiB allocated</div>
+          </div>
+          <div class="metric tone-warn">
+            <div class="metric-label"><i class="dot"></i><span class="label-micro">Disk</span></div>
+            <div class="metric-value" id="vm-detail-disk">–</div>
+            <div class="metric-note">GiB provisioned</div>
+          </div>
+          <div class="metric tone-ok">
+            <div class="metric-label"><i class="dot"></i><span class="label-micro">State</span></div>
+            <div class="metric-value" id="vm-detail-status">–</div>
+            <div class="metric-note" id="vm-detail-ip">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="panel">
           <div class="panel-head">
-            <h2>Terminal — <span class="mono" id="console-name"></span></h2>
+            <h2>Terminal</h2>
             <div class="panel-head-actions">
               <button class="btn btn-sm" id="console-refresh" type="button">Reconnect</button>
-              <button class="btn btn-sm btn-quiet" id="console-close" type="button">Close</button>
             </div>
           </div>
           <div class="panel-body">

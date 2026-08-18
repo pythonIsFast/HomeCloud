@@ -26,8 +26,13 @@
     nextBeforeId: null,
     quota: null,
     pollTimer: null,
-    consoleId: null,
+    detailId: null,
+    detailTimer: null,
+    consoleOffset: 0,
     consoleTimer: null,
+    pendingTerminalInput: "",
+    terminalInputTimer: null,
+    terminalInputSending: false,
   };
 
   // States in which the worker is about to change something, so the view keeps
@@ -104,35 +109,15 @@
     return button;
   }
 
-  function actionsFor(instance) {
-    const wrap = document.createElement("div");
-    wrap.className = "row-actions";
-
-    if (BUSY.includes(instance.status)) {
-      const note = document.createElement("span");
-      note.className = "label-micro";
-      note.textContent = "working";
-      wrap.appendChild(note);
-      return wrap;
-    }
-    if (instance.status === "deleted") return wrap;
-
-    if (instance.status === "running") {
-      wrap.appendChild(actionButton("Stop", instance, "stop"));
-      wrap.appendChild(actionButton("Restart", instance, "restart"));
-    } else {
-      wrap.appendChild(actionButton("Start", instance, "start"));
-    }
-
-    const consoleButton = document.createElement("button");
-    consoleButton.className = "btn btn-sm btn-quiet";
-    consoleButton.type = "button";
-    consoleButton.textContent = "Console";
-    consoleButton.addEventListener("click", () => openConsole(instance));
-    wrap.appendChild(consoleButton);
-
-    wrap.appendChild(actionButton("Delete", instance, "delete", true));
-    return wrap;
+  function openButton(instance) {
+    const button = document.createElement("button");
+    button.className = "btn btn-sm btn-quiet";
+    button.type = "button";
+    button.textContent = "Open";
+    button.addEventListener("click", () => {
+      window.location.hash = "vm/" + instance.id;
+    });
+    return button;
   }
 
   function addressCell(instance) {
@@ -146,7 +131,17 @@
   function instanceRow(instance) {
     const row = document.createElement("tr");
     row.appendChild(HC.cell(instance.id, "num"));
-    row.appendChild(HC.cell(instance.name, "primary"));
+    const name = HC.cell(instance.name, "primary");
+    name.tabIndex = 0;
+    name.classList.add("instance-link");
+    name.addEventListener("click", () => { window.location.hash = "vm/" + instance.id; });
+    name.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        window.location.hash = "vm/" + instance.id;
+      }
+    });
+    row.appendChild(name);
     row.appendChild(HC.cell(HC.tag(instance.flavor || "—")));
 
     const statusCell = HC.cell(HC.status(instance.status));
@@ -155,7 +150,7 @@
 
     row.appendChild(addressCell(instance));
     row.appendChild(HC.cell(HC.formatAge(instance.created_at), "mono"));
-    row.appendChild(HC.cell(actionsFor(instance), "right"));
+    row.appendChild(HC.cell(openButton(instance), "right"));
     return row;
   }
 
@@ -276,44 +271,107 @@
 
     HC.toast(action + " queued", instance.name, "success");
     await Promise.all([load(false), loadFlavors()]);
+    if (state.detailId === instance.id) await loadDetail(instance.id);
   }
 
-  /* --- serial console ----------------------------------------------------- */
+  /* --- instance dashboard and serial terminal --------------------------- */
 
-  const consolePanel = document.getElementById("console-panel");
   const consoleOut = document.getElementById("console-out");
+  const detailActions = document.getElementById("vm-detail-actions");
 
-  async function openConsole(instance) {
-    state.consoleId = instance.id;
-    document.getElementById("console-name").textContent = instance.name;
-    consolePanel.classList.remove("hidden");
-    consoleOut.textContent = "loading ...";
-    consolePanel.scrollIntoView({ block: "nearest" });
-    await refreshConsole();
-    consoleOut.focus();
-    if (state.consoleTimer) window.clearInterval(state.consoleTimer);
-    state.consoleTimer = window.setInterval(refreshConsole, 1000);
+  function clearConsoleTimer() {
+    if (state.consoleTimer) window.clearTimeout(state.consoleTimer);
+    state.consoleTimer = null;
+  }
+
+  function scheduleConsolePoll(delay) {
+    clearConsoleTimer();
+    if (!state.detailId) return;
+    state.consoleTimer = window.setTimeout(async () => {
+      await refreshConsole();
+      scheduleConsolePoll(350);
+    }, delay);
+  }
+
+  function renderDetail(instance) {
+    document.getElementById("vm-detail-name").textContent = instance.name;
+    document.getElementById("vm-detail-subtitle").textContent =
+      "Instance #" + instance.id + " · created " + HC.formatAge(instance.created_at);
+    document.getElementById("vm-detail-vcpu").textContent = instance.vcpu || "–";
+    document.getElementById("vm-detail-memory").textContent =
+      instance.memory_mb ? instance.memory_mb + " MiB" : "–";
+    document.getElementById("vm-detail-disk").textContent =
+      instance.disk_gb ? instance.disk_gb + " GiB" : "–";
+    document.getElementById("vm-detail-status").replaceChildren(HC.status(instance.status));
+    document.getElementById("vm-detail-ip").textContent = instance.ip || "no network address yet";
+
+    detailActions.replaceChildren();
+    if (BUSY.includes(instance.status)) {
+      const note = document.createElement("span");
+      note.className = "label-micro";
+      note.textContent = "operation in progress";
+      detailActions.appendChild(note);
+      return;
+    }
+    if (instance.status === "deleted") return;
+    if (instance.status === "running") {
+      detailActions.appendChild(actionButton("Stop", instance, "stop"));
+      detailActions.appendChild(actionButton("Restart", instance, "restart"));
+    } else {
+      detailActions.appendChild(actionButton("Start", instance, "start"));
+    }
+    detailActions.appendChild(actionButton("Delete", instance, "delete", true));
+  }
+
+  function scheduleDetailPoll(instance) {
+    if (state.detailTimer) window.clearTimeout(state.detailTimer);
+    state.detailTimer = null;
+    if (!BUSY.includes(instance.status)) return;
+    state.detailTimer = window.setTimeout(() => loadDetail(instance.id), 1500);
+  }
+
+  async function loadDetail(resourceId) {
+    const result = await HC.api("/compute/api/instances/" + resourceId);
+    if (window.location.hash !== "#vm/" + resourceId) return;
+    if (!result.ok) {
+      HC.toast("Instance failed to load", result.data.error || "HTTP " + result.status, "error");
+      window.location.hash = "compute";
+      return;
+    }
+    const instance = result.data.instance;
+    state.detailId = instance.id;
+    renderDetail(instance);
+    scheduleDetailPoll(instance);
+    if (instance.status === "running") {
+      if (state.consoleOffset === 0) consoleOut.textContent = "loading terminal ...";
+      scheduleConsolePoll(0);
+    } else {
+      clearConsoleTimer();
+      consoleOut.textContent = "Terminal is available while the instance is running.";
+    }
   }
 
   async function refreshConsole() {
-    if (!state.consoleId) return;
+    if (!state.detailId) return;
     const result = await HC.api(
-      "/compute/api/instances/" + state.consoleId + "/console"
+      "/compute/api/instances/" + state.detailId + "/console?after=" + state.consoleOffset
     );
     if (!result.ok) {
       consoleOut.textContent = result.data.error || "HTTP " + result.status;
       return;
     }
-    consoleOut.textContent = result.data.console || "(console is still empty)";
-    consoleOut.scrollTop = consoleOut.scrollHeight;
+    const wasAtBottom = consoleOut.scrollHeight - consoleOut.scrollTop - consoleOut.clientHeight < 24;
+    if (result.data.reset || state.consoleOffset === 0) consoleOut.textContent = "";
+    if (result.data.console) consoleOut.append(document.createTextNode(result.data.console));
+    if (!consoleOut.textContent) consoleOut.textContent = "(console is still empty)";
+    state.consoleOffset = result.data.offset || state.consoleOffset;
+    if (wasAtBottom) consoleOut.scrollTop = consoleOut.scrollHeight;
   }
 
-  document.getElementById("console-refresh").addEventListener("click", refreshConsole);
-  document.getElementById("console-close").addEventListener("click", () => {
-    state.consoleId = null;
-    if (state.consoleTimer) window.clearInterval(state.consoleTimer);
-    state.consoleTimer = null;
-    consolePanel.classList.add("hidden");
+  document.getElementById("console-refresh").addEventListener("click", () => {
+    state.consoleOffset = 0;
+    refreshConsole();
+    consoleOut.focus();
   });
 
   function keyToTerminalInput(event) {
@@ -332,35 +390,78 @@
 
   consoleOut.addEventListener("keydown", async (event) => {
     const input = keyToTerminalInput(event);
-    if (!state.consoleId || !input) return;
+    if (!state.detailId || !input) return;
     event.preventDefault();
-    const result = await HC.api(
-      "/compute/api/instances/" + state.consoleId + "/console/input",
-      { method: "POST", body: { input } }
-    );
-    if (!result.ok) {
-      HC.toast("Terminal input failed", result.data.error || "HTTP " + result.status, "error");
-    }
+    queueTerminalInput(input);
   });
 
   consoleOut.addEventListener("paste", async (event) => {
-    if (!state.consoleId) return;
+    if (!state.detailId) return;
     const input = event.clipboardData.getData("text");
     if (!input) return;
     event.preventDefault();
-    const result = await HC.api(
-      "/compute/api/instances/" + state.consoleId + "/console/input",
-      { method: "POST", body: { input } }
-    );
-    if (!result.ok) {
-      HC.toast("Terminal paste failed", result.data.error || "HTTP " + result.status, "error");
-    }
+    queueTerminalInput(input, "paste", 0);
   });
+
+  function queueTerminalInput(input, label, delay) {
+    state.pendingTerminalInput += input;
+    if (state.terminalInputTimer || state.terminalInputSending) return;
+    state.terminalInputTimer = window.setTimeout(
+      () => flushTerminalInput(label), delay === undefined ? 35 : delay
+    );
+  }
+
+  async function flushTerminalInput(label) {
+    state.terminalInputTimer = null;
+    if (!state.detailId || !state.pendingTerminalInput) return;
+    const input = state.pendingTerminalInput;
+    state.pendingTerminalInput = "";
+    state.terminalInputSending = true;
+    try {
+      const result = await HC.api(
+        "/compute/api/instances/" + state.detailId + "/console/input",
+        { method: "POST", body: { input } }
+      );
+      if (!result.ok) {
+        HC.toast("Terminal " + (label || "input") + " failed",
+          result.data.error || "HTTP " + result.status, "error");
+      }
+    } finally {
+      state.terminalInputSending = false;
+      if (state.pendingTerminalInput) queueTerminalInput("", label, 0);
+    }
+  }
+
+  function routeDetail() {
+    const match = window.location.hash.match(/^#vm\/(\d+)$/);
+    if (!match) {
+      state.detailId = null;
+      state.consoleOffset = 0;
+      state.pendingTerminalInput = "";
+      if (state.terminalInputTimer) window.clearTimeout(state.terminalInputTimer);
+      state.terminalInputTimer = null;
+      clearConsoleTimer();
+      if (state.detailTimer) window.clearTimeout(state.detailTimer);
+      state.detailTimer = null;
+      return;
+    }
+    const resourceId = Number(match[1]);
+    if (state.detailId !== resourceId) {
+      state.consoleOffset = 0;
+      state.pendingTerminalInput = "";
+    }
+    loadDetail(resourceId);
+  }
+
+  document.getElementById("vm-detail-back").addEventListener("click", () => {
+    window.location.hash = "compute";
+  });
+  window.addEventListener("homecloud:viewchange", routeDetail);
 
   /* --- registration with the shell --------------------------------------- */
 
   window.HCViews = window.HCViews || {};
   window.HCViews.compute = {
-    load: () => Promise.all([load(false), loadFlavors()]),
+    load: () => Promise.all([load(false), loadFlavors()]).then(routeDetail),
   };
 })();

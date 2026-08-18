@@ -227,14 +227,30 @@ def shutdown(vm_dir, pid, timeout=20.0):
     return "stuck"
 
 
-def tail_console(vm_dir, max_bytes=16384):
-    """Last bytes of the guest console, for the log view in the console UI."""
+def read_console(vm_dir, after=0, max_bytes=4096, initial_bytes=16384):
+    """Read one bounded incremental slice of the guest serial console.
+
+    The first read gets a useful tail. Later reads continue at ``after`` so the
+    browser never downloads and re-renders the full terminal once per poll.
+    """
     path = os.path.join(vm_dir, "console.log")
     try:
         size = os.path.getsize(path)
+        after = max(0, int(after))
+        reset = after > size
+        if after == 0 or reset:
+            start = max(0, size - initial_bytes)
+        else:
+            start = after
+        end = min(size, start + max_bytes)
         with open(path, "rb") as handle:
-            if size > max_bytes:
-                handle.seek(size - max_bytes)
-            return handle.read().decode("utf-8", "replace")
+            handle.seek(start)
+            text = handle.read(end - start).decode("utf-8", "replace")
+        return {"console": text, "offset": end, "more": end < size, "reset": reset}
     except OSError:
-        return ""
+        return {"console": "", "offset": 0, "more": False, "reset": False}
+
+
+def tail_console(vm_dir, max_bytes=16384):
+    """Compatibility helper for callers that only need one console tail."""
+    return read_console(vm_dir, initial_bytes=max_bytes)["console"]

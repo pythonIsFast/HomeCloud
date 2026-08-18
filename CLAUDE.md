@@ -431,6 +431,10 @@ of pills is noise, so `.event` stays flat mono text with a coloured dot.
   if its section is actually in the DOM — that is how `#admin` stays invisible
   to non-admins instead of rendering an empty page. Services without a blueprint
   are `.nav-item.is-disabled` placeholders.
+- Compute's index is intentionally an overview: it creates and lists instances
+  only. Clicking an instance opens its `#vm/<id>` dashboard, where resource
+  allocation, lifecycle controls and the terminal live. Do not put VM controls
+  back into the compute index.
 - **A service brings its own script** (`compute.js`, `admin.js`), loaded after
   `dashboard.js`, registering itself as
   `window.HCViews.<name> = { load: () => ... }`. The shell calls every

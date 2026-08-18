@@ -116,7 +116,8 @@ def instance_console(resource_id):
         return jsonify({"error": "instance not found"}), 404
 
     vm_dir = os.path.join(current_app.config["VM_DIR"], str(resource_id))
-    return jsonify({"console": firecracker.tail_console(vm_dir)})
+    after = request.args.get("after", default=0, type=int)
+    return jsonify(firecracker.read_console(vm_dir, after=max(0, after or 0)))
 
 
 @bp.post("/api/instances/<int:resource_id>/console/input")
