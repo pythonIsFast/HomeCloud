@@ -134,8 +134,8 @@ HomeCloud/
 │   ├── services/          # one subpackage per service, added later
 │   ├── static/
 │   │   ├── css/style.css
-│   │   └── js/{login.js,dashboard.js}
-│   └── templates/{base.html,login.html,dashboard.html}
+│   │   └── js/{app.js,login.js,dashboard.js}
+│   └── templates/{base.html,_icons.html,login.html,dashboard.html}
 ├── instance/              # SQLite DB + secret_key (gitignored, not in the repo)
 ├── wsgi.py                # gunicorn entry point
 ├── requirements.txt
@@ -236,15 +236,60 @@ front of gunicorn on `127.0.0.1:6002`. When TLS is terminated by nginx, set
 
 ## 7. Frontend conventions
 
-- Vanilla HTML/CSS/JS, no framework, no build step, no CDN imports.
-- Templates extend `app/templates/base.html`; the header always shows
-  "HomeCloud".
-- Data is loaded with `fetch()` against the JSON API; a `401` means the token
-  expired → redirect to `/auth/login?next=…`.
-- **Never use `innerHTML` with server data.** Build nodes and assign
-  `textContent` (see `renderRow` in `dashboard.js`).
-- Colors and spacing come from the CSS variables in `:root` — reuse them
-  instead of hardcoding hex values.
+Vanilla HTML/CSS/JS, no framework, no build step, no CDN imports, no npm. The
+UI is meant to look like a real SaaS console, so treat it as a small design
+system rather than ad-hoc markup.
+
+### Files
+
+| file                            | role                                                      |
+| ------------------------------- | --------------------------------------------------------- |
+| `templates/base.html`           | HTML skeleton, favicon, theme bootstrap, toast region     |
+| `templates/_icons.html`         | hidden SVG sprite; every icon is a `<symbol id="i-...">`   |
+| `templates/login.html`          | split auth layout (brand panel + sign-in/register tabs)   |
+| `templates/dashboard.html`      | app shell: sidebar + topbar + four views                  |
+| `static/css/style.css`          | design tokens and all components                          |
+| `static/js/app.js`              | shared `HC` helpers, loaded on every page                 |
+| `static/js/login.js`            | auth page behaviour                                       |
+| `static/js/dashboard.js`        | console behaviour                                         |
+
+### Rules
+
+- **Tokens only.** Every colour, radius, shadow and font comes from a custom
+  property in `:root` (`--brand-500`, `--surface`, `--radius`, `--shadow-sm`, …).
+  Never hardcode a hex value in a component.
+- **Both themes always.** Light is the default, dark follows
+  `prefers-color-scheme`, and an explicit choice is stored in `localStorage`
+  under `homecloud-theme` and applied as `data-theme` on `<html>`. Any new token
+  must be defined in the light block *and* in both dark blocks.
+- **Reuse the components** in `style.css` instead of inventing new markup:
+  `.btn` (+ `-primary` / `-ghost` / `-danger` / `-icon` / `-sm`), `.card` with
+  `.card-head`/`.card-body`/`.card-foot`, `.stat`, `.table`, `.badge`, `.chip`,
+  `.field` + `.input`/`.select`, `.empty-state`, `.skeleton`, `.menu`, `.toast`,
+  `.modal`.
+- **Icons** come from the sprite: `<svg><use href="#i-name"></use></svg>`. Add a
+  new 24x24 stroke symbol to `_icons.html` rather than pasting path data inline.
+- **Never use `innerHTML` with server data.** Build nodes and set `textContent`;
+  use the `HC.cell()` / `HC.statusBadge()` helpers (see `dashboard.js`).
+  `innerHTML` with a static literal string is acceptable.
+- **Every async action gives feedback**: `HC.setBusy(button, true, "Saving")` for
+  the button, `HC.renderSkeletonRows(tbody, rows, cols)` while a table loads,
+  `HC.toast(title, text, "success"|"error")` for the result, and an
+  `.empty-state` block whenever a list can be empty.
+- **All requests go through `HC.api(path, options)`** — it sets the JSON headers,
+  never throws, returns `{ok, status, data}`, and redirects to
+  `/auth/login?next=…` on `401`.
+- Timestamps from SQLite are UTC without a zone marker. Render them with
+  `HC.formatDateTime()` / `HC.formatRelative()`, which add the `Z` before parsing.
+- The console is a single page with client-side views switched by URL hash
+  (`#overview`, `#resources`, `#keys`, `#activity`). A new view means: a
+  `<section class="view" data-view="x">`, an entry in the `VIEWS` map, and a
+  `.nav-item[data-view="x"]` in the sidebar. Services that do not exist yet are
+  listed as `.nav-item.is-disabled` placeholders.
+- Accessibility is part of "done": one focus ring style for everything,
+  `aria-current="page"` on the active nav item, `aria-selected` on tabs,
+  `aria-busy` on loading buttons, `Escape` closes menus and modals, and the
+  layout stays usable down to 360 px (the sidebar becomes off-canvas at 860 px).
 
 ---
 

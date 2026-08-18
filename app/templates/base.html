@@ -3,26 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="{{ app_name }} — a self-hosted cloud control plane.">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
+
+  {# Inline data-URI favicon: no external request, no extra static file. #}
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%235b5bd6'/%3E%3Cpath d='M10 21V11m12 10V11M10 16h12' stroke='white' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E">
+
+  {# Apply the stored theme before first paint so there is no light/dark flash. #}
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("homecloud-theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (e) { /* localStorage can be blocked; the OS preference still applies */ }
+    })();
+  </script>
+
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-mark">HC</span>
-      <span class="brand-name">{{ app_name }}</span>
-    </div>
-    {% block topbar_right %}{% endblock %}
-  </header>
+  {% include "_icons.html" %}
 
-  <main class="content">
-    {% block content %}{% endblock %}
-  </main>
+  {% block body %}{% endblock %}
 
-  <footer class="footer">
-    <span>{{ app_name }} &mdash; self-hosted cloud dashboard</span>
-  </footer>
+  {# Live region every page can push toasts into (see app.js). #}
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
 
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

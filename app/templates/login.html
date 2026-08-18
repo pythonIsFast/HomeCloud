@@ -1,41 +1,145 @@
 {% extends "base.html" %}
 {% block title %}Sign in &middot; {{ app_name }}{% endblock %}
 
-{% block content %}
-<section class="card auth-card">
-  <h1>Sign in to {{ app_name }}</h1>
-  <p class="muted">Use your local account. Sessions are signed JSON Web Tokens.</p>
+{% block body %}
+<div class="auth">
 
-  <form id="login-form" autocomplete="on">
-    <label for="login-email">Email</label>
-    <input id="login-email" name="email" type="email" required autocomplete="username">
+  {# ----------------------------------------------------------- brand panel #}
+  <aside class="auth-aside">
+    <div class="brand">
+      <span class="brand-mark"><svg><use href="#i-logo"></use></svg></span>
+      <span class="brand-text">
+        <span class="brand-name">{{ app_name }}</span>
+        <span class="brand-sub">Control plane</span>
+      </span>
+    </div>
 
-    <label for="login-password">Password</label>
-    <input id="login-password" name="password" type="password" required
-           autocomplete="current-password">
+    <div class="auth-pitch">
+      <h2>Your own cloud, on your own hardware.</h2>
+      <p>
+        One console for compute, storage and databases &mdash; running on a machine
+        you control, with no external service in the path.
+      </p>
 
-    <button type="submit" class="primary">Sign in</button>
-  </form>
+      <ul class="auth-features">
+        <li>
+          <span class="tick"><svg><use href="#i-check"></use></svg></span>
+          <div>
+            <strong>One registry for every service</strong>
+            <span>Compute, storage and databases share a single resource model.</span>
+          </div>
+        </li>
+        <li>
+          <span class="tick"><svg><use href="#i-check"></use></svg></span>
+          <div>
+            <strong>Keys and sessions built in</strong>
+            <span>Signed tokens for the console, API keys for your scripts.</span>
+          </div>
+        </li>
+        <li>
+          <span class="tick"><svg><use href="#i-check"></use></svg></span>
+          <div>
+            <strong>Every change is auditable</strong>
+            <span>An append-only trail of who did what, and when.</span>
+          </div>
+        </li>
+      </ul>
+    </div>
 
-  {% if allow_registration %}
-  <hr>
-  <h2>Create an account</h2>
-  <p class="muted">The first account created becomes the administrator.</p>
+    <p class="auth-foot">Self-hosted &middot; no telemetry &middot; your data stays on your host.</p>
+  </aside>
 
-  <form id="register-form" autocomplete="on">
-    <label for="register-email">Email</label>
-    <input id="register-email" name="email" type="email" required autocomplete="username">
+  {# ------------------------------------------------------------ form panel #}
+  <main class="auth-panel">
+    <div class="auth-card">
+      <div class="card">
+        <div class="card-body">
+          {% if allow_registration %}
+          <div class="tabs" role="tablist" aria-label="Authentication">
+            <button class="tab" id="tab-login" type="button" role="tab"
+                    aria-selected="true" aria-controls="panel-login">Sign in</button>
+            <button class="tab" id="tab-register" type="button" role="tab"
+                    aria-selected="false" aria-controls="panel-register">Create account</button>
+          </div>
+          {% endif %}
 
-    <label for="register-password">Password</label>
-    <input id="register-password" name="password" type="password" required minlength="8"
-           autocomplete="new-password">
+          {# --- sign in --- #}
+          <div id="panel-login" role="tabpanel" aria-labelledby="tab-login">
+            <h1>Welcome back</h1>
+            <p class="muted">Sign in to your {{ app_name }} console.</p>
 
-    <button type="submit">Register</button>
-  </form>
-  {% endif %}
+            <form class="auth-form" id="login-form" autocomplete="on" novalidate>
+              <div class="field">
+                <label class="label" for="login-email">Email</label>
+                <input class="input" id="login-email" name="email" type="email" required
+                       autocomplete="username" placeholder="you@example.com">
+              </div>
 
-  <p id="auth-message" class="message" role="status" aria-live="polite"></p>
-</section>
+              <div class="field">
+                <label class="label" for="login-password">Password</label>
+                <div class="password-wrap">
+                  <input class="input" id="login-password" name="password" type="password"
+                         required autocomplete="current-password" placeholder="••••••••">
+                  <button class="password-toggle" type="button"
+                          data-toggle-password="login-password">Show</button>
+                </div>
+              </div>
+
+              <p class="field-error hidden" id="login-error" role="alert"></p>
+
+              <button class="btn btn-primary btn-block" type="submit" id="login-submit">
+                Sign in
+              </button>
+            </form>
+          </div>
+
+          {% if allow_registration %}
+          {# --- register --- #}
+          <div id="panel-register" role="tabpanel" aria-labelledby="tab-register" hidden>
+            <h1>Create your account</h1>
+            <p class="muted">The first account on this installation becomes the administrator.</p>
+
+            <form class="auth-form" id="register-form" autocomplete="on" novalidate>
+              <div class="field">
+                <label class="label" for="register-email">Email</label>
+                <input class="input" id="register-email" name="email" type="email" required
+                       autocomplete="username" placeholder="you@example.com">
+              </div>
+
+              <div class="field">
+                <label class="label" for="register-password">Password</label>
+                <div class="password-wrap">
+                  <input class="input" id="register-password" name="password" type="password"
+                         required minlength="8" autocomplete="new-password"
+                         placeholder="At least 8 characters">
+                  <button class="password-toggle" type="button"
+                          data-toggle-password="register-password">Show</button>
+                </div>
+                <p class="field-hint">Minimum 8 characters. Stored as a salted hash only.</p>
+              </div>
+
+              <p class="field-error hidden" id="register-error" role="alert"></p>
+
+              <button class="btn btn-primary btn-block" type="submit" id="register-submit">
+                Create account
+              </button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <p class="auth-legal">
+        {{ app_name }} runs on your own hardware.
+        <button class="btn btn-sm btn-ghost" id="theme-toggle" type="button">
+          <svg class="theme-icon-light"><use href="#i-sun"></use></svg>
+          <svg class="theme-icon-dark hidden"><use href="#i-moon"></use></svg>
+          Theme
+        </button>
+      </p>
+    </div>
+  </main>
+</div>
 {% endblock %}
 
 {% block scripts %}
